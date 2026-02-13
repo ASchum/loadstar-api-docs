@@ -329,6 +329,15 @@ export function handleApiError(error: any) {
       toast.error(data.message || 'Ресурс не найден');
       break;
 
+    case 409:
+      // Конфликт версий - требует пользовательского диалога
+      // Не показываем toast, возвращаем данные для обработки в компоненте
+      return {
+        type: 'conflict',
+        data: data.details,
+        message: data.message
+      };
+
     case 422:
       // Валидация - обрабатываем в компонентах формы
       if ('errors' in data) {
@@ -386,6 +395,90 @@ function ClientForm() {
         <div className="error">{errors.phone.join(', ')}</div>
       )}
     </form>
+  );
+}
+```
+
+### Обработка конфликта версий (409)
+
+```typescript
+// components/ClientEditForm.tsx
+import { useState } from 'react';
+import { handleApiError } from '@/utils/errorHandler';
+
+function ClientEditForm({ clientId, initialData }) {
+  const [formData, setFormData] = useState(initialData);
+  const [showConflictDialog, setShowConflictDialog] = useState(false);
+  const [conflictDetails, setConflictDetails] = useState(null);
+
+  const handleSubmit = async () => {
+    try {
+      await api.put(`/clients/${clientId}`, {
+        ...formData,
+        updated_at: initialData.updated_at // ← Отправляем версию
+      });
+      toast.success('Клиент обновлен');
+    } catch (error) {
+      const result = handleApiError(error);
+      
+      // Проверяем на конфликт версий
+      if (result?.type === 'conflict') {
+        setConflictDetails(result);
+        setShowConflictDialog(true); // Показываем диалог
+        return;
+      }
+      
+      // Обработка других ошибок (422 валидация и т.д.)
+      if (result) {
+        setErrors(result);
+      }
+    }
+  };
+
+  const handleLoadFreshData = async () => {
+    // Кнопка "Загрузить актуальные данные"
+    const freshData = await api.get(`/clients/${clientId}`);
+    setFormData(freshData); // Перезаполняем форму
+    setShowConflictDialog(false);
+    toast.info('Данные обновлены. Вы можете продолжить редактирование');
+  };
+
+  const handleCancelChanges = () => {
+    // Кнопка "Отменить"
+    setShowConflictDialog(false);
+    onClose(); // Закрыть форму
+  };
+
+  return (
+    <>
+      <form onSubmit={handleSubmit}>
+        {/* ... поля формы ... */}
+      </form>
+
+      {/* Диалог конфликта версий */}
+      {showConflictDialog && (
+        <Dialog open>
+          <DialogTitle>Конфликт версий</DialogTitle>
+          <DialogContent>
+            <p>{conflictDetails.message}</p>
+            <p>
+              Данные были изменены пользователем{' '}
+              <strong>{conflictDetails.data.modified_by}</strong>
+            </p>
+            <p>Ваша версия: {conflictDetails.data.your_updated_at}</p>
+            <p>Текущая версия: {conflictDetails.data.current_updated_at}</p>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleLoadFreshData} color="primary">
+              Загрузить актуальные данные
+            </Button>
+            <Button onClick={handleCancelChanges} color="secondary">
+              Отменить
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
+    </>
   );
 }
 ```
