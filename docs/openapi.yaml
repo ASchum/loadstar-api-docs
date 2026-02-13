@@ -19,9 +19,6 @@ info:
     - **Supervisor** - надзор и контроль
     
   version: 1.0.0
-  contact:
-    name: LoadStar Support
-    email: support@loadstar.local
   license:
     name: Proprietary
 
