@@ -148,7 +148,7 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: Logged out successfully
+                    example: Вы успешно вышли из системы
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -1638,7 +1638,7 @@ components:
           example: "Bad Request"
         message:
           type: string
-          example: "Invalid request parameters"
+          example: "Неверные параметры запроса"
         details:
           type: object
           nullable: true
