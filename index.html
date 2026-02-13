@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoadStar API Documentation</title>
+    <meta name="description" content="REST API документация для системы управления логистическими процессами LoadStar">
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+        
+        .topbar {
+            background-color: #1e3a5f;
+            padding: 15px 0;
+        }
+        
+        .topbar-wrapper {
+            max-width: 1460px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        .topbar-wrapper .link {
+            color: #fff;
+            font-size: 1.5em;
+            font-weight: bold;
+            text-decoration: none;
+        }
+        
+        .topbar-wrapper .link span {
+            color: #89bf04;
+        }
+        
+        .info {
+            margin: 20px 0;
+        }
+        
+        /* Кастомизация Swagger UI */
+        .swagger-ui .topbar {
+            display: none;
+        }
+        
+        .swagger-ui .info .title {
+            font-size: 2.5em;
+            color: #1e3a5f;
+        }
+        
+        .swagger-ui .scheme-container {
+            background: #fafafa;
+            padding: 20px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <div class="topbar-wrapper">
+            <a class="link" href="/">
+                <span>Load</span>Star API Documentation
+            </a>
+        </div>
+    </div>
+    
+    <div id="swagger-ui"></div>
+
+    <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.onload = function() {
+            // Определяем URL для OpenAPI файла
+            const specUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                ? './docs/openapi.yaml'  // Локально
+                : './docs/openapi.yaml'; // На GitHub Pages
+            
+            window.ui = SwaggerUIBundle({
+                url: specUrl,
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout",
+                
+                // Настройки для LoadStar API
+                defaultModelsExpandDepth: 1,
+                defaultModelExpandDepth: 2,
+                docExpansion: "list", // "none" | "list" | "full"
+                filter: true, // Включаем поиск
+                showExtensions: true,
+                showCommonExtensions: true,
+                
+                // Try it out настройки
+                tryItOutEnabled: false, // По умолчанию выключено
+                requestSnippetsEnabled: true, // Показывать примеры кода
+                requestSnippets: {
+                    generators: {
+                        curl_bash: {
+                            title: "cURL (bash)",
+                            syntax: "bash"
+                        },
+                        curl_powershell: {
+                            title: "cURL (PowerShell)",
+                            syntax: "powershell"
+                        },
+                        curl_cmd: {
+                            title: "cURL (CMD)",
+                            syntax: "bash"
+                        }
+                    },
+                    defaultExpanded: true,
+                    languages: null // null = все языки
+                },
+                
+                // Персистентная авторизация
+                persistAuthorization: true,
+                
+                // Валидация
+                validatorUrl: "https://validator.swagger.io/validator",
+                
+                // Кастомизация
+                syntaxHighlight: {
+                    activate: true,
+                    theme: "monokai"
+                }
+            });
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,2684 @@
+openapi: 3.0.3
+info:
+  title: LoadStar API
+  description: |
+    REST API для системы управления логистическими процессами LoadStar.
+    
+    ## Аутентификация
+    API использует JWT токены для аутентификации. После успешного логина вы получаете:
+    - `access_token` - для всех API запросов (срок действия: 8 часов)
+    - `refresh_token` - для обновления access token (срок действия: 7 дней)
+    
+    Все защищенные endpoints требуют `Authorization: Bearer <access_token>` header.
+    
+    ## Роли пользователей
+    - **Admin** - полный контроль системой
+    - **Sales** - работа с лидами и запросами
+    - **Ops** - работа с клиентами и заказами
+    - **Logist** - согласование маршрутов
+    - **Supervisor** - надзор и контроль
+    
+  version: 1.0.0
+  contact:
+    name: LoadStar Support
+    email: support@loadstar.local
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.loadstar.local/api
+    description: Production сервер
+  - url: http://localhost:8000/api
+    description: Development сервер
+
+tags:
+  - name: Authentication
+    description: Аутентификация и управление токенами
+  - name: Users
+    description: Управление пользователями (сотрудниками)
+  - name: Clients
+    description: Управление клиентами и лидами
+  - name: Contragents
+    description: Управление контрагентами
+  - name: Requests
+    description: Управление запросами
+  - name: Orders
+    description: Управление заказами
+  - name: Route
+    description: Согласование маршрутов
+  - name: Dictionaries
+    description: Справочники системы
+  - name: Reports
+    description: Отчеты и аналитика
+  - name: Files
+    description: Работа с файлами
+
+security:
+  - BearerAuth: []
+
+paths:
+  # ===== AUTHENTICATION =====
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Вход в систему
+      description: Аутентификация пользователя по логину и паролю
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - login
+                - password
+              properties:
+                login:
+                  type: string
+                  example: sales_manager
+                password:
+                  type: string
+                  format: password
+                  example: password123
+      responses:
+        '200':
+          description: Успешная аутентификация
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: JWT access token (срок действия 8 часов)
+                  refresh_token:
+                    type: string
+                    description: JWT refresh token (срок действия 7 дней)
+                  user:
+                    $ref: '#/components/schemas/UserLite'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Обновление access token
+      description: Получение нового access token используя refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+                  description: Refresh token полученный при логине
+      responses:
+        '200':
+          description: Новый access token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Выход из системы
+      description: Инвалидация текущего токена (добавление в blacklist)
+      responses:
+        '200':
+          description: Успешный выход
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logged out successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Получить данные текущего пользователя
+      description: Возвращает информацию о текущем аутентифицированном пользователе
+      responses:
+        '200':
+          description: Данные пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserLite'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ===== USERS (EMPLOYEES) =====
+  /users:
+    get:
+      tags:
+        - Users
+      summary: Список пользователей
+      description: Получить список всех пользователей (только Admin)
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: role
+          in: query
+          schema:
+            $ref: '#/components/schemas/UserRole'
+        - name: active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Список пользователей
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags:
+        - Users
+      summary: Создать пользователя
+      description: Создание нового пользователя (только Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          description: Пользователь создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /users/{id}:
+    get:
+      tags:
+        - Users
+      summary: Получить пользователя
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Данные пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Users
+      summary: Обновить пользователя
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: Пользователь обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      tags:
+        - Users
+      summary: Деактивировать пользователя
+      description: Установить active = false (не удаляет из БД)
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204':
+          description: Пользователь деактивирован
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ===== CLIENTS =====
+  /clients:
+    get:
+      tags:
+        - Clients
+      summary: Список клиентов и лидов
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ClientStatus'
+        - name: search
+          in: query
+          description: Поиск по названию, ИНН, городу
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Список клиентов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Client'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+    post:
+      tags:
+        - Clients
+      summary: Создать клиента/лида
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientCreate'
+      responses:
+        '201':
+          description: Клиент создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /clients/{id}:
+    get:
+      tags:
+        - Clients
+      summary: Карточка клиента
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Данные клиента
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Clients
+      summary: Обновить клиента
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientUpdate'
+      responses:
+        '200':
+          description: Клиент обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /clients/{id}/contacts:
+    get:
+      tags:
+        - Clients
+      summary: Контакты клиента
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Список контактов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClientContact'
+
+    post:
+      tags:
+        - Clients
+      summary: Добавить контакт
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientContactCreate'
+      responses:
+        '201':
+          description: Контакт добавлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientContact'
+
+  /clients/{id}/contacts/{contactId}:
+    put:
+      tags:
+        - Clients
+      summary: Обновить контакт клиента
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - name: contactId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID контакта
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientContactCreate'
+      responses:
+        '200':
+          description: Контакт обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientContact'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      tags:
+        - Clients
+      summary: Удалить контакт клиента
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - name: contactId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID контакта
+      responses:
+        '204':
+          description: Контакт удален
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ===== CONTRAGENTS =====
+  /contragents:
+    get:
+      tags:
+        - Contragents
+      summary: Список контрагентов
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Список контрагентов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Contragent'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+    post:
+      tags:
+        - Contragents
+      summary: Создать контрагента
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContragentCreate'
+      responses:
+        '201':
+          description: Контрагент создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contragent'
+
+  /contragents/{id}:
+    get:
+      tags:
+        - Contragents
+      summary: Карточка контрагента
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Данные контрагента
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContragentDetail'
+
+    put:
+      tags:
+        - Contragents
+      summary: Обновить контрагента
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContragentUpdate'
+      responses:
+        '200':
+          description: Контрагент обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contragent'
+
+  /contragents/{id}/contacts:
+    get:
+      tags:
+        - Contragents
+      summary: Контакты контрагента
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Список контактов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContragentContact'
+
+    post:
+      tags:
+        - Contragents
+      summary: Добавить контакт контрагента
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContragentContactCreate'
+      responses:
+        '201':
+          description: Контакт добавлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContragentContact'
+
+  /contragents/{id}/contacts/{contactId}:
+    put:
+      tags:
+        - Contragents
+      summary: Обновить контакт контрагента
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - name: contactId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID контакта
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContragentContactCreate'
+      responses:
+        '200':
+          description: Контакт обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContragentContact'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      tags:
+        - Contragents
+      summary: Удалить контакт контрагента
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - name: contactId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID контакта
+      responses:
+        '204':
+          description: Контакт удален
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /contragents/{id}/contracts:
+    get:
+      tags:
+        - Contragents
+      summary: Договоры (контракты) контрагента
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Список договоров
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContragentContract'
+
+    post:
+      tags:
+        - Contragents
+      summary: Добавить договор контрагента
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContragentContractCreate'
+      responses:
+        '201':
+          description: Договор добавлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContragentContract'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /contragents/{id}/contracts/{contractId}:
+    put:
+      tags:
+        - Contragents
+      summary: Обновить договор контрагента
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID договора
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContragentContractCreate'
+      responses:
+        '200':
+          description: Договор обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContragentContract'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      tags:
+        - Contragents
+      summary: Удалить договор контрагента
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID договора
+      responses:
+        '204':
+          description: Договор удален
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ===== REQUESTS =====
+  /requests:
+    get:
+      tags:
+        - Requests
+      summary: Список запросов
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/RequestStatus'
+        - name: client_id
+          in: query
+          schema:
+            type: integer
+        - name: initiator_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Список запросов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Request'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+    post:
+      tags:
+        - Requests
+      summary: Создать запрос
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestCreate'
+      responses:
+        '201':
+          description: Запрос создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestDetail'
+
+  /requests/{id}:
+    get:
+      tags:
+        - Requests
+      summary: Детальная информация о запросе
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Данные запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestDetail'
+
+    put:
+      tags:
+        - Requests
+      summary: Обновить запрос
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestUpdate'
+      responses:
+        '200':
+          description: Запрос обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestDetail'
+
+  /requests/{id}/negotiate:
+    post:
+      tags:
+        - Route
+      summary: Отправить сообщение в чат согласования маршрута
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  type: string
+                  description: Текст сообщения
+                files:
+                  type: array
+                  items:
+                    type: integer
+                  description: Массив ID загруженных файлов
+      responses:
+        '201':
+          description: Сообщение отправлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteNegotiation'
+
+  /requests/{id}/negotiations:
+    get:
+      tags:
+        - Route
+      summary: История согласования маршрута
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Список сообщений
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RouteNegotiation'
+
+  /requests/{id}/route:
+    get:
+      tags:
+        - Route
+      summary: Получить маршрут запроса
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Этапы маршрута
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RouteStage'
+
+    post:
+      tags:
+        - Route
+      summary: Добавить этап маршрута
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteStageCreate'
+      responses:
+        '201':
+          description: Этап добавлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteStage'
+
+  /requests/{id}/route/{stageId}:
+    delete:
+      tags:
+        - Route
+      summary: Удалить этап маршрута
+      description: После удаления этапа порядок (stage_order) оставшихся этапов автоматически пересчитывается
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - name: stageId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Этап удален
+        '404':
+          description: Этап не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /requests/{id}/route/reorder:
+    put:
+      tags:
+        - Route
+      summary: Изменить порядок этапов маршрута
+      description: Принимает массив ID этапов в нужном порядке. Бэкенд переназначает stage_order всем этапам.
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteReorder'
+      responses:
+        '200':
+          description: Порядок этапов обновлен
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RouteStage'
+        '404':
+          description: Один или несколько этапов не найдены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /requests/{id}/approve:
+    post:
+      tags:
+        - Requests
+      summary: Одобрить запрос (превратить в заказ)
+      description: Изменяет status с New/Negotiating на Approved
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Запрос одобрен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestDetail'
+
+  /requests/{id}/reject:
+    post:
+      tags:
+        - Requests
+      summary: Отклонить запрос
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rejection_reason
+              properties:
+                rejection_reason:
+                  type: string
+      responses:
+        '200':
+          description: Запрос отклонен
+
+  /requests/{id}/files:
+    get:
+      tags:
+        - Requests
+      summary: Получить файлы запроса
+      description: Файлы, загруженные к запросу до его одобрения
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Список файлов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RequestFile'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Requests
+      summary: Загрузить файл к запросу
+      description: Прикрепить файл к запросу
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - file_id
+              properties:
+                file_id:
+                  type: integer
+                  description: ID загруженного файла (через /files/upload)
+      responses:
+        '201':
+          description: Файл прикреплен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestFile'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /requests/{id}/files/{fileId}:
+    delete:
+      tags:
+        - Requests
+      summary: Удалить файл запроса
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID файла
+      responses:
+        '204':
+          description: Файл удален
+        '404':
+          description: Файл не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ===== ORDERS =====
+  /orders:
+    get:
+      tags:
+        - Orders
+      summary: Список заказов
+      description: Запросы со статусом Approved или Completed
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [Approved, Completed]
+      responses:
+        '200':
+          description: Список заказов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OrderList'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+  /orders/{id}:
+    get:
+      tags:
+        - Orders
+      summary: Детальная информация о заказе
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Данные заказа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetail'
+
+  /orders/{id}/documents:
+    get:
+      tags:
+        - Orders
+      summary: Документы заказа
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Список документов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RequestDocument'
+
+    post:
+      tags:
+        - Orders
+      summary: Добавить документ к заказу
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - file_id
+              properties:
+                file_id:
+                  type: integer
+                  description: ID загруженного файла
+                document_description:
+                  type: string
+                  description: Описание документа
+      responses:
+        '201':
+          description: Документ добавлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestDocument'
+
+  /orders/{id}/documents/{documentId}:
+    delete:
+      tags:
+        - Orders
+      summary: Удалить документ заказа
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Документ удален
+        '404':
+          description: Документ не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /orders/{id}/invoices:
+    get:
+      tags:
+        - Orders
+      summary: Счета по заказу
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Список счетов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RequestInvoice'
+
+    post:
+      tags:
+        - Orders
+      summary: Создать счет
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestInvoiceCreate'
+      responses:
+        '201':
+          description: Счет создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestInvoice'
+
+  /orders/{id}/contracts:
+    get:
+      tags:
+        - Orders
+      summary: Договоры заказа
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Список договоров
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RequestContract'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Orders
+      summary: Добавить договор к заказу
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestContractCreate'
+      responses:
+        '201':
+          description: Договор создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestContract'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /orders/{id}/contracts/{contractId}:
+    delete:
+      tags:
+        - Orders
+      summary: Удалить договор заказа
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID договора
+      responses:
+        '204':
+          description: Договор удален
+        '404':
+          description: Договор не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /orders/{id}/financial-records:
+    get:
+      tags:
+        - Orders
+      summary: Фактические доходы/расходы
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Список финансовых записей
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RequestFinancialRecord'
+
+    post:
+      tags:
+        - Orders
+      summary: Добавить доход/расход
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestFinancialRecordCreate'
+      responses:
+        '201':
+          description: Запись добавлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestFinancialRecord'
+
+  /orders/{id}/complete:
+    post:
+      tags:
+        - Orders
+      summary: Завершить заказ
+      description: Изменяет status на Completed (только Supervisor)
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Заказ завершен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetail'
+
+  # ===== DICTIONARIES =====
+  /dictionaries:
+    get:
+      tags:
+        - Dictionaries
+      summary: Список всех справочников
+      responses:
+        '200':
+          description: Все справочники
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vehicle_types:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DictionaryItem'
+                  currencies:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DictionaryItem'
+                  incoterms:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DictionaryItem'
+                  cities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DictionaryItem'
+
+  /dictionaries/{type}:
+    get:
+      tags:
+        - Dictionaries
+      summary: Получить конкретный справочник
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [vehicle_types, currencies, incoterms, cities, services]
+      responses:
+        '200':
+          description: Справочник
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DictionaryItem'
+
+  # ===== FILES =====
+  /files/upload:
+    post:
+      tags:
+        - Files
+      summary: Загрузить файл
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Файл загружен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  file_name:
+                    type: string
+                  file_size:
+                    type: integer
+                  file_path:
+                    type: string
+
+  /files/{id}/download:
+    get:
+      tags:
+        - Files
+      summary: Скачать файл
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Файл
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  # ===== REPORTS =====
+  /reports/requests:
+    get:
+      tags:
+        - Reports
+      summary: Отчет по запросам
+      parameters:
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/RequestStatus'
+        - name: initiator_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Данные отчета
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      by_status:
+                        type: object
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Request'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT токен полученный при логине.
+        Формат: `Bearer <access_token>`
+
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: ID записи
+
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      description: Номер страницы
+
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+      description: Количество записей на странице
+
+  responses:
+    Unauthorized:
+      description: Не авторизован (отсутствует или невалидный токен)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Unauthorized
+            message: Token is invalid or expired
+
+    Forbidden:
+      description: Доступ запрещен (недостаточно прав)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Forbidden
+            message: You do not have permission to access this resource
+
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Not Found
+            message: Resource not found
+
+    ValidationError:
+      description: Ошибка валидации
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: Validation Error
+              message:
+                type: string
+              errors:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    type: string
+            example:
+              error: Validation Error
+              message: The given data was invalid
+              errors:
+                email:
+                  - The email field is required
+                  - The email must be a valid email address
+                phone:
+                  - The phone format is invalid
+
+  schemas:
+    # ===== COMMON =====
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Bad Request"
+        message:
+          type: string
+          example: "Invalid request parameters"
+        details:
+          type: object
+          nullable: true
+          example:
+            timestamp: "2026-02-13T10:30:00Z"
+            path: "/api/clients/123"
+
+    PaginationMeta:
+      type: object
+      properties:
+        current_page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 150
+        total_pages:
+          type: integer
+          example: 8
+
+    # ===== USER =====
+    UserRole:
+      type: string
+      enum:
+        - Admin
+        - Sales
+        - Ops
+        - Logist
+        - Supervisor
+
+    UserLite:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+        email:
+          type: string
+          format: email
+
+    User:
+      allOf:
+        - $ref: '#/components/schemas/UserLite'
+        - type: object
+          properties:
+            phone:
+              type: string
+            login:
+              type: string
+            active:
+              type: boolean
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+
+    UserCreate:
+      type: object
+      required:
+        - name
+        - role
+        - email
+        - phone
+        - login
+        - password
+      properties:
+        name:
+          type: string
+          example: Иван Иванов
+        role:
+          $ref: '#/components/schemas/UserRole'
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          example: "+7999 999 9999"
+        login:
+          type: string
+          example: ivan_ivanov
+        password:
+          type: string
+          format: password
+          minLength: 8
+
+    UserUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        active:
+          type: boolean
+        password:
+          type: string
+          format: password
+          minLength: 8
+
+    # ===== CLIENT =====
+    ClientStatus:
+      type: string
+      enum:
+        - Lead
+        - Active
+        - Inactive
+
+    Client:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        inn:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/ClientStatus'
+        sales_manager_id:
+          type: integer
+          nullable: true
+        sales_manager:
+          $ref: '#/components/schemas/UserLite'
+        created_at:
+          type: string
+          format: date-time
+
+    ClientDetail:
+      allOf:
+        - $ref: '#/components/schemas/Client'
+        - type: object
+          properties:
+            address:
+              type: string
+              nullable: true
+            bank_name:
+              type: string
+              nullable: true
+            bank_account:
+              type: string
+              nullable: true
+            correspondent_account:
+              type: string
+              nullable: true
+            bik:
+              type: string
+              nullable: true
+            target_volume:
+              type: integer
+              nullable: true
+            shipping_direction:
+              type: string
+              nullable: true
+            cooperation_with:
+              type: string
+              nullable: true
+            what_they_value:
+              type: string
+              nullable: true
+            converted_at:
+              type: string
+              format: date-time
+              nullable: true
+            leading_manager_id:
+              type: integer
+              nullable: true
+            leading_manager:
+              $ref: '#/components/schemas/UserLite'
+            comment:
+              type: string
+              nullable: true
+            contacts:
+              type: array
+              items:
+                $ref: '#/components/schemas/ClientContact'
+
+    ClientCreate:
+      type: object
+      required:
+        - name
+        - status
+      properties:
+        name:
+          type: string
+        inn:
+          type: string
+        city:
+          type: string
+        address:
+          type: string
+        status:
+          $ref: '#/components/schemas/ClientStatus'
+        sales_manager_id:
+          type: integer
+
+    ClientUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        inn:
+          type: string
+        city:
+          type: string
+        address:
+          type: string
+        bank_name:
+          type: string
+        bank_account:
+          type: string
+        correspondent_account:
+          type: string
+        bik:
+          type: string
+        target_volume:
+          type: integer
+        shipping_direction:
+          type: string
+        cooperation_with:
+          type: string
+        what_they_value:
+          type: string
+        status:
+          $ref: '#/components/schemas/ClientStatus'
+        leading_manager_id:
+          type: integer
+        comment:
+          type: string
+
+    ClientContact:
+      type: object
+      properties:
+        id:
+          type: integer
+        client_id:
+          type: integer
+        name:
+          type: string
+        position:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        contact_type:
+          type: string
+          enum: [current, lpr]
+          nullable: true
+
+    ClientContactCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        position:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        contact_type:
+          type: string
+          enum: [current, lpr]
+
+    # ===== CONTRAGENT =====
+    Contragent:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        inn:
+          type: string
+        city:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    ContragentDetail:
+      allOf:
+        - $ref: '#/components/schemas/Contragent'
+        - type: object
+          properties:
+            address:
+              type: string
+              nullable: true
+            shipping_direction:
+              type: string
+              nullable: true
+            contracts:
+              type: array
+              items:
+                $ref: '#/components/schemas/ContragentContract'
+            contacts:
+              type: array
+              items:
+                $ref: '#/components/schemas/ContragentContact'
+
+    ContragentCreate:
+      type: object
+      required:
+        - name
+        - inn
+      properties:
+        name:
+          type: string
+        inn:
+          type: string
+        city:
+          type: string
+        address:
+          type: string
+        shipping_direction:
+          type: string
+
+    ContragentUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        city:
+          type: string
+        address:
+          type: string
+        shipping_direction:
+          type: string
+        active:
+          type: boolean
+
+    ContragentContract:
+      type: object
+      properties:
+        id:
+          type: integer
+        contragent_id:
+          type: integer
+        contract_number:
+          type: string
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          nullable: true
+        payment_condition:
+          type: string
+          nullable: true
+        payment_form:
+          type: string
+          nullable: true
+
+    ContragentContractCreate:
+      type: object
+      required:
+        - contract_number
+        - start_date
+      properties:
+        contract_number:
+          type: string
+          example: "Договор №123/2026"
+        start_date:
+          type: string
+          format: date
+          example: "2026-01-01"
+        end_date:
+          type: string
+          format: date
+          nullable: true
+          example: "2027-12-31"
+        payment_condition:
+          type: string
+          example: "Оплата в течение 30 дней"
+        payment_form:
+          type: string
+          example: "Безналичный расчет"
+
+    ContragentContact:
+      type: object
+      properties:
+        id:
+          type: integer
+        contragent_id:
+          type: integer
+        name:
+          type: string
+        position:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+
+    ContragentContactCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: "Петр Петров"
+        position:
+          type: string
+          example: "Менеджер по закупкам"
+        email:
+          type: string
+          format: email
+          example: "petr@contragent.ru"
+        phone:
+          type: string
+          example: "+7999 888 7777"
+
+    # ===== REQUEST =====
+    RequestStatus:
+      type: string
+      enum:
+        - New
+        - Negotiating
+        - Approved
+        - Completed
+        - Rejected
+
+    Request:
+      type: object
+      properties:
+        id:
+          type: integer
+        client_id:
+          type: integer
+        client:
+          $ref: '#/components/schemas/Client'
+        initiator_id:
+          type: integer
+        initiator:
+          $ref: '#/components/schemas/UserLite'
+        departure_point:
+          type: string
+        destination_point:
+          type: string
+        cargo_name:
+          type: string
+        status:
+          $ref: '#/components/schemas/RequestStatus'
+        created_at:
+          type: string
+          format: date-time
+
+    RequestDetail:
+      allOf:
+        - $ref: '#/components/schemas/Request'
+        - type: object
+          properties:
+            incoterms:
+              type: string
+              nullable: true
+            shipper_name:
+              type: string
+              nullable: true
+            departure_address:
+              type: string
+              nullable: true
+            recipient_name:
+              type: string
+              nullable: true
+            destination_address:
+              type: string
+              nullable: true
+            transport_type:
+              type: string
+              nullable: true
+            gross_weight:
+              type: number
+              nullable: true
+            is_heavy_items:
+              type: boolean
+            is_customs_by_us:
+              type: boolean
+            customs_location:
+              type: string
+              nullable: true
+            tnved_code:
+              type: string
+              nullable: true
+            comment:
+              type: string
+              nullable: true
+            rejection_reason:
+              type: string
+              nullable: true
+            completed_at:
+              type: string
+              format: date-time
+              nullable: true
+            transport_units:
+              type: array
+              items:
+                $ref: '#/components/schemas/RequestTransportUnit'
+            route_stages:
+              type: array
+              items:
+                $ref: '#/components/schemas/RouteStage'
+
+    RequestCreate:
+      type: object
+      required:
+        - client_id
+        - departure_point
+        - destination_point
+        - cargo_name
+        - is_customs_by_us
+      properties:
+        client_id:
+          type: integer
+        incoterms:
+          type: string
+        shipper_name:
+          type: string
+        departure_point:
+          type: string
+        departure_address:
+          type: string
+        recipient_name:
+          type: string
+        destination_point:
+          type: string
+        destination_address:
+          type: string
+        transport_type:
+          type: string
+        cargo_name:
+          type: string
+        gross_weight:
+          type: number
+        is_heavy_items:
+          type: boolean
+        is_customs_by_us:
+          type: boolean
+        customs_location:
+          type: string
+        tnved_code:
+          type: string
+        comment:
+          type: string
+        transport_units:
+          type: array
+          items:
+            type: object
+            required:
+              - vehicle_type
+              - qty
+            properties:
+              vehicle_type:
+                type: string
+              qty:
+                type: integer
+
+    RequestUpdate:
+      type: object
+      properties:
+        incoterms:
+          type: string
+        shipper_name:
+          type: string
+        departure_point:
+          type: string
+        departure_address:
+          type: string
+        recipient_name:
+          type: string
+        destination_point:
+          type: string
+        destination_address:
+          type: string
+        transport_type:
+          type: string
+        cargo_name:
+          type: string
+        gross_weight:
+          type: number
+        is_heavy_items:
+          type: boolean
+        is_customs_by_us:
+          type: boolean
+        customs_location:
+          type: string
+        tnved_code:
+          type: string
+        comment:
+          type: string
+        transport_units:
+          type: array
+          items:
+            type: object
+            required:
+              - vehicle_type
+              - qty
+            properties:
+              vehicle_type:
+                type: string
+              qty:
+                type: integer
+
+    RequestTransportUnit:
+      type: object
+      properties:
+        id:
+          type: integer
+        request_id:
+          type: integer
+        vehicle_type:
+          type: string
+        qty:
+          type: integer
+
+    # ===== ROUTE =====
+    RouteStageType:
+      type: string
+      enum:
+        - delivery
+        - transshipment
+        - customs
+        - warehouse
+
+    RouteStage:
+      type: object
+      properties:
+        id:
+          type: integer
+        request_id:
+          type: integer
+        stage_order:
+          type: integer
+        stage_type:
+          $ref: '#/components/schemas/RouteStageType'
+        contragent_id:
+          type: integer
+          nullable: true
+        contragent:
+          $ref: '#/components/schemas/Contragent'
+        departure_location:
+          type: string
+          nullable: true
+          description: Точка отправления (используется для stage_type = delivery)
+        destination_location:
+          type: string
+          nullable: true
+          description: Точка назначения (используется для stage_type = delivery)
+        service_type:
+          type: string
+          nullable: true
+        base_cost:
+          type: number
+          nullable: true
+        base_currency:
+          type: string
+          nullable: true
+        conversion_percent:
+          type: number
+          nullable: true
+        client_rate:
+          type: number
+          nullable: true
+        client_rate_currency:
+          type: string
+          nullable: true
+        customs_cost:
+          type: number
+          nullable: true
+          description: Стоимость таможенного оформления (используется для stage_type = customs)
+        customs_currency:
+          type: string
+          nullable: true
+          description: Валюта таможенных расходов (USD/CNY/EUR/RUB, используется для stage_type = customs)
+        customs_conversion_percent:
+          type: number
+          nullable: true
+          description: Процент конверсии для таможенных расходов (используется для stage_type = customs)
+        customs_declaration_numbers:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Массив номеров ДТ (используется для stage_type = customs)
+          example: ["10000000/010123/0000001", "10000000/010123/0000002"]
+        planned_departure_date:
+          type: string
+          format: date
+          nullable: true
+          description: Плановая дата отправления (используется для stage_type = delivery)
+        planned_arrival_date:
+          type: string
+          format: date
+          nullable: true
+          description: Плановая дата прибытия (используется для stage_type = delivery)
+        actual_departure_date:
+          type: string
+          format: date
+          nullable: true
+          description: Фактическая дата отправления (используется для stage_type = delivery)
+        actual_arrival_date:
+          type: string
+          format: date
+          nullable: true
+          description: Фактическая дата прибытия (используется для stage_type = delivery)
+        location:
+          type: string
+          nullable: true
+          description: Локация (используется для stage_type = transshipment, customs, warehouse)
+        planned_date:
+          type: string
+          format: date
+          nullable: true
+          description: Плановая дата (используется для stage_type = transshipment, customs, warehouse)
+        actual_date:
+          type: string
+          format: date
+          nullable: true
+          description: Фактическая дата (используется для stage_type = transshipment, customs, warehouse)
+
+    RouteStageCreate:
+      type: object
+      required:
+        - stage_type
+      properties:
+        stage_order:
+          type: integer
+          description: Порядковый номер этапа. Если не указан, этап добавится в конец маршрута
+        stage_type:
+          $ref: '#/components/schemas/RouteStageType'
+        contragent_id:
+          type: integer
+        departure_location:
+          type: string
+          description: Точка отправления (используется для stage_type = delivery)
+        destination_location:
+          type: string
+          description: Точка назначения (используется для stage_type = delivery)
+        service_type:
+          type: string
+        base_cost:
+          type: number
+        base_currency:
+          type: string
+        conversion_percent:
+          type: number
+        client_rate:
+          type: number
+        client_rate_currency:
+          type: string
+        customs_cost:
+          type: number
+          description: Стоимость таможенного оформления (используется для stage_type = customs)
+        customs_currency:
+          type: string
+          description: Валюта таможенных расходов (USD/CNY/EUR/RUB, используется для stage_type = customs)
+        customs_conversion_percent:
+          type: number
+          description: Процент конверсии для таможенных расходов (используется для stage_type = customs)
+        customs_declaration_numbers:
+          type: array
+          items:
+            type: string
+          description: Массив номеров ДТ (используется для stage_type = customs)
+          example: ["10000000/010123/0000001", "10000000/010123/0000002"]
+        planned_departure_date:
+          type: string
+          format: date
+          description: Плановая дата отправления (используется для stage_type = delivery)
+        planned_arrival_date:
+          type: string
+          format: date
+          description: Плановая дата прибытия (используется для stage_type = delivery)
+        location:
+          type: string
+          description: Локация (используется для stage_type = transshipment, customs, warehouse)
+        planned_date:
+          type: string
+          format: date
+          description: Плановая дата (используется для stage_type = transshipment, customs, warehouse)
+
+    RouteReorder:
+      type: object
+      required:
+        - stage_ids
+      properties:
+        stage_ids:
+          type: array
+          items:
+            type: integer
+          description: Массив ID этапов в нужном порядке
+          example: [5, 2, 8, 1]
+
+    RouteNegotiation:
+      type: object
+      properties:
+        id:
+          type: integer
+        request_id:
+          type: integer
+        author_id:
+          type: integer
+        author:
+          $ref: '#/components/schemas/UserLite'
+        message:
+          type: string
+        message_date:
+          type: string
+          format: date-time
+        files:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              file_name:
+                type: string
+              file_path:
+                type: string
+
+    # ===== ORDER =====
+    OrderList:
+      allOf:
+        - $ref: '#/components/schemas/Request'
+
+    OrderDetail:
+      allOf:
+        - $ref: '#/components/schemas/RequestDetail'
+        - type: object
+          properties:
+            documents:
+              type: array
+              items:
+                $ref: '#/components/schemas/RequestDocument'
+            invoices:
+              type: array
+              items:
+                $ref: '#/components/schemas/RequestInvoice'
+            contracts:
+              type: array
+              items:
+                $ref: '#/components/schemas/RequestContract'
+            financial_records:
+              type: array
+              items:
+                $ref: '#/components/schemas/RequestFinancialRecord'
+
+    RequestDocument:
+      type: object
+      properties:
+        id:
+          type: integer
+        request_id:
+          type: integer
+        document_description:
+          type: string
+          nullable: true
+        file_name:
+          type: string
+        file_path:
+          type: string
+        file_size:
+          type: integer
+        uploaded_by_id:
+          type: integer
+        uploaded_by:
+          $ref: '#/components/schemas/UserLite'
+        created_at:
+          type: string
+          format: date-time
+
+    RequestInvoice:
+      type: object
+      properties:
+        id:
+          type: integer
+        request_id:
+          type: integer
+        invoice_type:
+          type: string
+          enum: [to_client, from_contragent]
+        contragent_id:
+          type: integer
+          nullable: true
+          description: ID контрагента (используется для invoice_type = from_contragent)
+        contragent:
+          $ref: '#/components/schemas/Contragent'
+        invoice_number:
+          type: string
+          nullable: true
+        invoice_date:
+          type: string
+          format: date
+          nullable: true
+        responsible_user_id:
+          type: integer
+          nullable: true
+        responsible_user:
+          $ref: '#/components/schemas/UserLite'
+        created_at:
+          type: string
+          format: date-time
+
+    RequestInvoiceCreate:
+      type: object
+      required:
+        - invoice_type
+      properties:
+        invoice_type:
+          type: string
+          enum: [to_client, from_contragent]
+        contragent_id:
+          type: integer
+          description: ID контрагента (указывается для invoice_type = from_contragent)
+        invoice_number:
+          type: string
+        invoice_date:
+          type: string
+          format: date
+
+    RequestContract:
+      type: object
+      properties:
+        id:
+          type: integer
+        request_id:
+          type: integer
+        contract_number:
+          type: string
+        contract_date:
+          type: string
+          format: date
+        payment_condition:
+          type: string
+          nullable: true
+        payment_form:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    RequestContractCreate:
+      type: object
+      required:
+        - contract_number
+        - contract_date
+      properties:
+        contract_number:
+          type: string
+          example: "Договор №456/2026"
+        contract_date:
+          type: string
+          format: date
+          example: "2026-02-13"
+        payment_condition:
+          type: string
+          example: "Оплата в течение 14 дней"
+        payment_form:
+          type: string
+          example: "Безналичный расчет"
+
+    RequestFinancialRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        request_id:
+          type: integer
+        record_type:
+          type: string
+          enum: [Income, Expense]
+        description:
+          type: string
+        amount:
+          type: number
+        invoice_number:
+          type: string
+          nullable: true
+        payment_date:
+          type: string
+          format: date
+          nullable: true
+        comment:
+          type: string
+          nullable: true
+        created_by_id:
+          type: integer
+        created_by:
+          $ref: '#/components/schemas/UserLite'
+        created_at:
+          type: string
+          format: date-time
+
+    RequestFinancialRecordCreate:
+      type: object
+      required:
+        - record_type
+        - description
+        - amount
+      properties:
+        record_type:
+          type: string
+          enum: [Income, Expense]
+        description:
+          type: string
+        amount:
+          type: number
+        invoice_number:
+          type: string
+        payment_date:
+          type: string
+          format: date
+        comment:
+          type: string
+
+    RequestFile:
+      type: object
+      properties:
+        id:
+          type: integer
+        request_id:
+          type: integer
+        file_name:
+          type: string
+        file_path:
+          type: string
+        file_size:
+          type: integer
+        uploaded_by_id:
+          type: integer
+        uploaded_by:
+          $ref: '#/components/schemas/UserLite'
+        created_at:
+          type: string
+          format: date-time
+
+    # ===== DICTIONARY =====
+    DictionaryItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        dictionary_type:
+          type: string
+          example: "vehicle_types"
+        value:
+          type: string
+          example: "Фура 20т"
+        description:
+          type: string
+          nullable: true
+          example: "Грузовая фура грузоподъемностью 20 тонн"
+        active:
+          type: boolean
+          example: true

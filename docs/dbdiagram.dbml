@@ -1,0 +1,411 @@
+// LoadStar Database Schema for dbdiagram.io
+// Дата создания: 05.02.2026
+// Последнее обновление: 13.02.2026 - Переименование таблиц и полей (singular naming, short names)
+// Импортируйте этот файл на https://dbdiagram.io
+
+Project LoadStar {
+  database_type: 'MySQL'
+  Note: 'Система управления логистическими процессами LoadStar'
+}
+
+// =====================================================
+// 1. Сотрудники (Пользователи системы)
+// =====================================================
+Table user {
+  id int [pk, increment]
+  name varchar(255) [not null, note: 'ФИО']
+  role enum [not null, note: 'Admin, Sales, Ops, Logist, Supervisor']
+  phone varchar(20) [not null]
+  email varchar(255) [not null, unique]
+  login varchar(100) [not null, unique]
+  password varchar(255) [not null]
+  active boolean [default: true]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (role)
+    (login)
+    (active)
+  }
+  Note: 'Таблица сотрудников (пользователей системы)'
+}
+
+// =====================================================
+// 2. Контрагенты
+// =====================================================
+Table contragent {
+  id int [pk, increment]
+  name varchar(255) [not null]
+  inn varchar(12) [not null, unique]
+  city varchar(100)
+  address text
+  shipping_direction text
+  active boolean [default: true]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (name)
+    (inn)
+    (city)
+    (active)
+  }
+  Note: 'Таблица контрагентов (партнеры)'
+}
+
+// =====================================================
+// 3. Договоры контрагентов
+// =====================================================
+Table contragent_contract {
+  id int [pk, increment]
+  contragent_id int [not null, ref: > contragent.id]
+  contract_number varchar(50) [not null]
+  start_date date [not null]
+  end_date date
+  payment_condition varchar(255)
+  payment_form varchar(255)
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (contragent_id, contract_number) [unique]
+  }
+  Note: 'Договоры контрагентов'
+}
+
+// =====================================================
+// 4. Контактные лица контрагентов
+// =====================================================
+Table contragent_contact {
+  id int [pk, increment]
+  contragent_id int [not null, ref: > contragent.id]
+  name varchar(255) [not null]
+  position varchar(100)
+  email varchar(255)
+  phone varchar(20)
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (contragent_id)
+  }
+  Note: 'Контактные лица контрагентов'
+}
+
+// =====================================================
+// 5. Клиенты и Лиды (объединенная таблица)
+// =====================================================
+Table client {
+  id int [pk, increment]
+  name varchar(255) [not null, note: 'Название компании (для лида может быть именем контактного лица)']
+  inn varchar(12) [unique, note: 'ИНН компании (обязательно для статуса Client, может быть NULL для Lead)']
+  city varchar(100)
+  address text
+  bank_name varchar(255) [note: 'Заполняется только для Client']
+  bank_account varchar(20) [note: 'Заполняется только для Client']
+  correspondent_account varchar(20) [note: 'Заполняется только для Client']
+  bik varchar(9) [note: 'Заполняется только для Client']
+  target_volume int [note: 'Целевой объем в месяц (для Client)']
+  shipping_direction text
+  cooperation_with text
+  what_they_value text
+  status enum [default: 'Lead', note: 'Lead (лид) | Active (активный клиент) | Inactive (неактивный)']
+  converted_at timestamp [note: 'Когда лид стал клиентом: первый запрос перешел в Approved (Lead → Active)']
+  leading_manager_id int [ref: > user.id, note: 'Ведущий менеджер (обычно для Active)']
+  sales_manager_id int [ref: > user.id, note: 'Менеджер по продажам']
+  comment text
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (name)
+    (inn)
+    (city)
+    (leading_manager_id)
+    (sales_manager_id)
+    (status)
+  }
+  Note: 'Объединенная таблица лидов и клиентов. Лид (status=Lead) становится клиентом (status=Active) когда первый запрос становится заказом (request.status=Approved). Метрика "не стали клиентами" = лиды без успешных запросов'
+}
+
+// =====================================================
+// 6. Контактные лица клиентов и лидов
+// =====================================================
+Table client_contact {
+  id int [pk, increment]
+  client_id int [not null, ref: > client.id]
+  name varchar(255) [not null]
+  position varchar(100)
+  email varchar(255)
+  phone varchar(20)
+  contact_type varchar(20) [note: 'current, lpr']
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (client_id)
+    (contact_type)
+  }
+  Note: 'Контактные лица (текущие контакты и ЛПР) как клиентов, так и лидов'
+}
+
+// =====================================================
+// 7. Запросы
+// =====================================================
+Table request {
+  id int [pk, increment]
+  initiator_id int [not null, ref: > user.id, note: 'Сотрудник-инициатор (роль определяется через user.role)']
+  client_id int [not null, ref: > client.id, note: 'Ссылка на клиента/лида (client.status определяет тип)']
+  
+  // Данные запроса
+  incoterms char(3) [note: 'EXW, FCA, FOB, CIF, CIP, CPT, DAP']
+  shipper_name varchar(255)
+  departure_point varchar(100) [not null, note: 'Откуда (минимум город/страна)']
+  departure_address text
+  recipient_name varchar(255)
+  destination_point varchar(100) [not null, note: 'Куда (минимум город/страна)']
+  destination_address text
+  transport_type varchar(50)
+  cargo_name varchar(255) [not null, note: 'Что везем (обязательно)']
+  gross_weight decimal(12,2)
+  is_heavy_items boolean [default: false]
+  is_customs_by_us boolean [not null, note: 'true = Нашими силами, false = Силами импортера']
+  customs_location varchar(100)
+  tnved_code varchar(20)
+  comment text
+  
+  // Статусы
+  status enum [default: 'New', note: 'New (новый запрос) | Negotiating (согласование) | Approved (одобрен, стал заказом, выполняется) | Completed (завершен) | Rejected (отклонен)']
+  rejection_reason text [note: 'Причина отклонения (если status = Rejected)']
+  
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  completed_at timestamp [note: 'Дата перехода в статус Completed или Rejected']
+  
+  indexes {
+    (initiator_id)
+    (client_id)
+    (status)
+    (created_at)
+  }
+  Note: 'Таблица запросов и заказов. Запрос (status: New/Negotiating/Rejected) превращается в Заказ (status: Approved/Completed) при одобрении. В статусе Approved заказ выполняется, Ops вводит фактические даты этапов. client_id ссылается на client (может быть как лид, так и клиент)'
+}
+
+// =====================================================
+// 8. Состав сборки запроса (Тип ТС + Количество)
+// =====================================================
+Table request_transport_unit {
+  id int [pk, increment]
+  request_id int [not null, ref: > request.id]
+  vehicle_type varchar(50) [not null, note: 'Тип ТС (20DC/40HC/...); допускается ручной ввод']
+  qty int [not null, note: 'Количество единиц данного типа ТС']
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (request_id)
+    (request_id, vehicle_type) [unique]
+  }
+  Note: 'Состав сборки запроса: тип ТС и количество'
+}
+
+// =====================================================
+// 9. Файлы запроса
+// =====================================================
+Table request_file {
+  id int [pk, increment]
+  request_id int [not null, ref: > request.id]
+  file_name varchar(255) [not null]
+  file_path varchar(500) [not null]
+  file_size int
+  uploaded_by_id int [not null, ref: > user.id]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (request_id)
+  }
+  Note: 'нужно уточнить про эту таблицу'
+}
+
+// =====================================================
+// 10. Согласование маршрута (Чат)
+// =====================================================
+Table route_negotiation {
+  id int [pk, increment]
+  request_id int [not null, ref: > request.id]
+  author_id int [not null, ref: > user.id]
+  message text [not null]
+  message_date timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (request_id)
+    (message_date)
+  }
+  Note: 'Таблица сообщений согласования маршрута (чат)'
+}
+
+// =====================================================
+// 11. Файлы в сообщениях согласования
+// =====================================================
+Table route_negotiation_file {
+  id int [pk, increment]
+  negotiation_id int [not null, ref: > route_negotiation.id]
+  file_name varchar(255) [not null]
+  file_path varchar(500) [not null]
+  file_size int
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (negotiation_id)
+  }
+  Note: 'Файлы, прикрепленные к сообщениям согласования маршрута'
+}
+
+// =====================================================
+// 12. Этапы маршрута (универсальная таблица)
+// =====================================================
+Table route_stage {
+  id int [pk, increment]
+  request_id int [not null, ref: > request.id]
+  stage_order int [not null, note: 'Порядок этапа в маршруте']
+  stage_type enum [not null, note: 'delivery | transshipment | customs | warehouse']
+  
+  // Поля для delivery (А→Б)
+  contragent_id int [ref: > contragent.id, note: 'Только для delivery']
+  departure_location varchar(100) [note: 'Для delivery']
+  destination_location varchar(100) [note: 'Для delivery']
+  service_type varchar(100) [note: 'Для delivery: морской фрахт/жд фрахт/авто/авиа']
+  base_cost decimal(15,2) [note: 'Для delivery: базовая ставка']
+  base_currency varchar(3) [note: 'Для delivery: USD/CNY/EUR/RUB']
+  conversion_percent decimal(5,2) [default: 0, note: 'Для delivery']
+  client_rate decimal(15,2) [note: 'Для delivery: ставка клиенту']
+  client_rate_currency varchar(3) [note: 'Для delivery: USD/CNY/EUR/RUB']
+  planned_departure_date date [note: 'Для delivery']
+  planned_arrival_date date [note: 'Для delivery']
+  actual_departure_date date [note: 'Для delivery']
+  actual_arrival_date date [note: 'Для delivery']
+  
+  // Поля для transshipment/warehouse
+  location varchar(100) [note: 'Для transshipment/customs/warehouse']
+  planned_date date [note: 'Для transshipment/customs/warehouse']
+  actual_date date [note: 'Для transshipment/customs/warehouse']
+  
+  // Поля для customs
+  customs_cost decimal(15,2) [note: 'Только для customs']
+  customs_currency varchar(3) [note: 'Только для customs: USD/CNY/EUR/RUB']
+  customs_conversion_percent decimal(5,2) [default: 0, note: 'Только для customs']
+  customs_declaration_numbers json [note: 'Только для customs: массив номеров ДТ ["10000000/010123/0000001", ...]']
+  
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (request_id)
+    (request_id, stage_order) [unique]
+    (stage_type)
+  }
+  Note: 'Универсальная таблица всех этапов маршрута: доставка А→Б, перегрузка, таможня, склад. Составляется Sales/Ops после согласования с логистом, используется заказом через request_id'
+}
+
+// =====================================================
+// 13. Договоры в заказе
+// =====================================================
+Table request_contract {
+  id int [pk, increment]
+  request_id int [not null, ref: > request.id, note: 'Заполняется когда request.status >= Approved']
+  contract_number varchar(50) [not null]
+  contract_date date [not null]
+  payment_condition varchar(255)
+  payment_form varchar(255)
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (request_id)
+  }
+  Note: 'Договоры в заказах (привязаны к request с status >= Approved)'
+}
+
+// =====================================================
+// 14. Документы в заказе
+// =====================================================
+Table request_document {
+  id int [pk, increment]
+  request_id int [not null, ref: > request.id, note: 'Заполняется когда request.status >= Approved']
+  document_description varchar(255)
+  file_name varchar(255) [not null]
+  file_path varchar(500) [not null]
+  file_size int
+  uploaded_by_id int [not null, ref: > user.id]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (request_id)
+  }
+  Note: 'Документы (файлы) в заказах (привязаны к request с status >= Approved)'
+}
+
+// =====================================================
+// 15. Счета (универсальная таблица)
+// =====================================================
+Table request_invoice {
+  id int [pk, increment]
+  request_id int [not null, ref: > request.id, note: 'Заполняется когда request.status >= Approved']
+  invoice_type enum [not null, note: 'to_client (выставлен клиенту) | from_counterparty (запрошен у контрагента)']
+  contragent_id int [ref: > contragent.id, note: 'Только для from_counterparty']
+  invoice_number varchar(50)
+  invoice_date date
+  responsible_user_id int [ref: > user.id, note: 'Кто выставил/запросил счет']
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (request_id)
+    (invoice_type)
+    (contragent_id)
+  }
+  Note: 'Универсальная таблица счетов: выставленные клиентам и запрошенные у контрагентов (привязаны к request с status >= Approved)'
+}
+
+// =====================================================
+// 16. Фактические доходы/расходы
+// =====================================================
+Table request_financial_record {
+  id int [pk, increment]
+  request_id int [not null, ref: > request.id, note: 'Заполняется когда request.status >= Approved']
+  record_type varchar(20) [not null, note: 'Income, Expense']
+  description varchar(255) [not null, note: 'Описание операции']
+  amount decimal(15,2) [not null, note: 'Сумма']
+  invoice_number varchar(50) [note: 'Номер счета (при оплате)']
+  payment_date date [note: 'Дата оплаты']
+  comment text [note: 'Комментарий (переплата/недоплата)']
+  created_by_id int [ref: > user.id]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (request_id)
+    (record_type)
+  }
+  Note: 'Фактические доходы и расходы по заказу (привязаны к request с status >= Approved)'
+}
+
+// =====================================================
+// 17. Справочники
+// =====================================================
+Table dictionary {
+  id int [pk, increment]
+  dictionary_type varchar(50) [not null]
+  value varchar(255) [not null]
+  description text
+  active boolean [default: true]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (dictionary_type, value) [unique]
+    (dictionary_type)
+    (active)
+  }
+  Note: 'Справочники и словари системы'
+}
