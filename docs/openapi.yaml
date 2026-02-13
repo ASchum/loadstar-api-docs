@@ -271,6 +271,8 @@ paths:
                 $ref: '#/components/schemas/User'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationError'
 
@@ -378,6 +380,8 @@ paths:
                 $ref: '#/components/schemas/Client'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationError'
 
@@ -547,6 +551,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Contragent'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 
   /contragents/{id}/contacts:
     get:
@@ -810,6 +820,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RequestDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 
   /requests/{id}/negotiate:
     post:
@@ -1581,6 +1597,40 @@ components:
                 phone:
                   - The phone format is invalid
 
+    Conflict:
+      description: Конфликт версий (данные изменены другим пользователем)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: Conflict
+              message:
+                type: string
+                example: Данные были изменены другим пользователем. Загрузите актуальную версию
+              details:
+                type: object
+                properties:
+                  resource:
+                    type: string
+                    example: client
+                  resource_id:
+                    type: integer
+                    example: 123
+                  your_updated_at:
+                    type: string
+                    format: date-time
+                    example: "2026-02-13T10:00:00Z"
+                  current_updated_at:
+                    type: string
+                    format: date-time
+                    example: "2026-02-13T14:30:00Z"
+                  modified_by:
+                    type: string
+                    example: "Иван Иванов (Ops)"
+
   schemas:
     # ===== COMMON =====
     Error:
@@ -1687,7 +1737,13 @@ components:
 
     UserUpdate:
       type: object
+      required:
+        - updated_at
       properties:
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp последнего изменения (для контроля версий и предотвращения конфликтов)
         name:
           type: string
         role:
@@ -1806,7 +1862,13 @@ components:
 
     ClientUpdate:
       type: object
+      required:
+        - updated_at
       properties:
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp последнего изменения (для контроля версий и предотвращения конфликтов)
         name:
           type: string
         inn:
@@ -1936,7 +1998,13 @@ components:
 
     ContragentUpdate:
       type: object
+      required:
+        - updated_at
       properties:
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp последнего изменения (для контроля версий и предотвращения конфликтов)
         name:
           type: string
         city:
@@ -2180,7 +2248,13 @@ components:
 
     RequestUpdate:
       type: object
+      required:
+        - updated_at
       properties:
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp последнего изменения (для контроля версий и предотвращения конфликтов)
         incoterms:
           type: string
         shipper_name:
