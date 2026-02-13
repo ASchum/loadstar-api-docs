@@ -18,7 +18,7 @@ info:
     - **Logist** - согласование маршрутов
     - **Supervisor** - надзор и контроль
     
-  version: 1.0.0
+  version: 1.1.0
   license:
     name: Proprietary
 
@@ -32,7 +32,7 @@ tags:
   - name: Authentication
     description: Аутентификация и управление токенами
   - name: Users
-    description: Управление пользователями (сотрудниками)
+    description: Управление пользователями
   - name: Clients
     description: Управление клиентами и лидами
   - name: Contragents
@@ -168,7 +168,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  # ===== USERS (EMPLOYEES) =====
+  # ===== USERS =====
   /users:
     get:
       tags:
