@@ -47,11 +47,14 @@
 
 ---
 
-### 2. Схема базы данных (SQL для MySQL)
-**Файл:** [database_schema.sql](database_schema.sql)
+### 2. Схема базы данных (DBML)
+**Файл:** [dbdiagram.dbml](dbdiagram.dbml)
+
+**Интерактивная визуализация:** [Открыть на dbdiagram.io](https://dbdiagram.io/d)
 
 **Содержит:**
-- ✅ 17 таблиц с полной документацией
+- ✅ 17 таблиц в формате DBML (Database Markup Language)
+- ✅ Связи между таблицами (one-to-many, many-to-one)
 - ✅ Primary Keys, Foreign Keys, Unique constraints
 - ✅ Индексы на часто используемые поля
 - ✅ Комментарии на русском для каждого поля
@@ -74,13 +77,14 @@
 ```
 
 **Примечание:** 
-- Таблицы requests и orders объединены в table request. Request со статусом New/Negotiating/Rejected = запрос, 
+- Таблицы requests и orders объединены в одну таблицу request. Request со статусом New/Negotiating/Rejected = запрос, 
 со статусом Approved/Completed = заказ. Для изменения маршрута Supervisor возвращает статус в Negotiating.
 - Таблицы clients и leads объединены в одну таблицу client со статусом для разделения: Lead (потенциальные клиенты), 
 Active/Inactive (клиенты). Контакты хранятся в единой таблице client_contact.
 - Используется singular naming для таблиц (user, contragent, client, request) согласно современным conventions.
 
-**Объем:** ~700 строк SQL кода
+**Объем:** ~600 строк DBML кода  
+**Визуализация:** Импортируйте файл на [dbdiagram.io](https://dbdiagram.io/d) для просмотра ER-диаграммы
 
 ---
 
