@@ -1544,7 +1544,7 @@ components:
             $ref: '#/components/schemas/Error'
           example:
             error: Unauthorized
-            message: Token is invalid or expired
+            message: Токен недействителен или истёк
 
     Forbidden:
       description: Доступ запрещен (недостаточно прав)
@@ -1554,7 +1554,7 @@ components:
             $ref: '#/components/schemas/Error'
           example:
             error: Forbidden
-            message: You do not have permission to access this resource
+            message: У вас нет прав для выполнения этой операции
 
     NotFound:
       description: Ресурс не найден
@@ -1564,7 +1564,7 @@ components:
             $ref: '#/components/schemas/Error'
           example:
             error: Not Found
-            message: Resource not found
+            message: Ресурс не найден
 
     ValidationError:
       description: Ошибка валидации
@@ -1586,13 +1586,13 @@ components:
                     type: string
             example:
               error: Validation Error
-              message: The given data was invalid
+              message: Переданные данные не прошли валидацию
               errors:
                 email:
-                  - The email field is required
-                  - The email must be a valid email address
+                  - Email обязателен для заполнения
+                  - Email должен быть корректным адресом
                 phone:
-                  - The phone format is invalid
+                  - Телефон должен быть в формате +7XXXXXXXXXX
 
     Conflict:
       description: Конфликт версий (данные изменены другим пользователем)

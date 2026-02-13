@@ -24,7 +24,7 @@
 ```json
 {
   "error": "Bad Request",
-  "message": "Invalid JSON format",
+  "message": "Неверный формат JSON",
   "details": {
     "line": 5,
     "column": 12
@@ -42,14 +42,14 @@
 // Токен отсутствует
 {
   "error": "Token Missing",
-  "message": "Authorization header is required",
+  "message": "Требуется заголовок Authorization",
   "details": null
 }
 
 // Токен невалидный
 {
   "error": "Token Invalid",
-  "message": "Token signature verification failed",
+  "message": "Не удалось проверить подпись токена",
   "details": {
     "reason": "signature_invalid"
   }
@@ -58,7 +58,7 @@
 // Токен истёк
 {
   "error": "Token Expired",
-  "message": "Access token has expired",
+  "message": "Срок действия токена истёк",
   "details": {
     "expired_at": "2026-02-13T10:00:00Z",
     "now": "2026-02-13T18:00:00Z"
@@ -171,10 +171,11 @@
 // Development (показываем стек)
 {
   "error": "Internal Server Error",
-  "message": "SQLSTATE[42S02]: Base table or view not found",
+  "message": "Ошибка БД: таблица или представление не найдено",
   "details": {
     "file": "/var/www/src/controllers/ClientController.php",
     "line": 45,
+    "sql_error": "SQLSTATE[42S02]: Base table or view not found",
     "trace": "..."
   }
 }
