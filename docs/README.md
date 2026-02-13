@@ -2,10 +2,10 @@
 
 ## 📖 Документация API
 
-**Интерактивная документация:** [Открыть Swagger UI](../index.html) (после деплоя на GitHub Pages)
+**Интерактивная документация:** [Открыть Swagger UI](https://aschum.github.io/loadstar-api-docs/)
 
 **Альтернативные способы просмотра:**
-- [Swagger Editor Online](https://editor.swagger.io/?url=https://raw.githubusercontent.com/USERNAME/loadstar-docs/main/docs/openapi.yaml) - Замените USERNAME на ваш GitHub логин
+- [Swagger Editor Online](https://editor.swagger.io/?url=https://raw.githubusercontent.com/ASchum/loadstar-api-docs/main/docs/openapi.yaml)
 - Локально: `npx @redocly/cli preview-docs docs/openapi.yaml`
 - [Скачать OpenAPI спецификацию](openapi.yaml)
 
