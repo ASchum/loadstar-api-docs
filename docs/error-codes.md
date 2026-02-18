@@ -227,19 +227,15 @@
 **Когда:** Данные были изменены другим пользователем с момента их загрузки
 
 ```json
-// PUT /api/clients/123
+// PATCH /api/clients/123
 // Status: 409 Conflict
 
 {
   "error": "Conflict",
   "message": "Данные были изменены другим пользователем. Загрузите актуальную версию",
   "details": {
-    "resource": "client",
-    "resource_id": 123,
     "your_updated_at": "2026-02-13T10:00:00Z",
-    "current_updated_at": "2026-02-13T14:30:00Z",
-    "modified_by": "Иван Иванов (Ops)",
-    "conflict_fields": ["name", "city"]
+    "current_updated_at": "2026-02-13T14:30:00Z"
   }
 }
 ```
@@ -247,22 +243,24 @@
 **Как работает:**
 1. Frontend загружает данные: `GET /api/clients/123` → получает `updated_at: "2026-02-13T10:00:00Z"`
 2. Пользователь редактирует данные в форме
-3. Frontend отправляет: `PUT /api/clients/123` с `updated_at: "2026-02-13T10:00:00Z"` в теле
+3. Frontend отправляет: `PATCH /api/clients/123` с `updated_at: "2026-02-13T10:00:00Z"` в теле
 4. Backend проверяет: если `updated_at` в БД отличается → возвращает 409 Conflict
-5. Frontend показывает уведомление: "Данные были изменены Иван Иванов. Обновите страницу"
+5. Frontend показывает диалог с выбором действия
 
 **Фронтенд действие:**
-- Показать уведомление (toast/alert) с именем пользователя, который последний изменил данные
-- Сообщение: **"Данные были изменены {modified_by}. Пожалуйста, обновите страницу и повторите попытку"**
-- Закрыть форму редактирования
-- Пользователь обновляет страницу (F5) или возвращается к списку
-- При повторном открытии формы получит актуальные данные с новым `updated_at`
+- Показать модальное окно/диалог с сообщением о конфликте
+- Показать версии (ваша и текущая) для информации
+- Единственная кнопка: **[Обновить страницу]**
+- При нажатии: `window.location.reload()` - страница обновляется
+- Пользователь видит актуальные данные с изменениями коллеги
+- Вносит свои изменения поверх актуальных данных
+- Сохраняет с новым `updated_at`
 
 **Применяется к:**
-- `PUT /api/clients/{id}` — обновление клиента
-- `PUT /api/contragents/{id}` — обновление контрагента
-- `PUT /api/requests/{id}` — обновление запроса
-- `PUT /api/users/{id}` — обновление пользователя
+- `PATCH /api/clients/{id}` — обновление клиента
+- `PATCH /api/contragents/{id}` — обновление контрагента
+- `PATCH /api/requests/{id}` — обновление запроса
+- `PATCH /api/users/{id}` — обновление пользователя
 
 ---
 
@@ -325,11 +323,12 @@ export function handleApiError(error: any) {
 
     case 409:
       // Конфликт версий - данные изменены другим пользователем
-      const modifiedBy = data.details?.modified_by || 'другой пользователь';
-      toast.error(
-        `Данные были изменены (${modifiedBy}). Обновите страницу и повторите попытку.`,
-        { duration: 5000 }
-      );
+      // Показать диалог и предложить обновить страницу
+      showConflictDialog({
+        yourVersion: data.details?.your_updated_at,
+        currentVersion: data.details?.current_updated_at,
+        onReload: () => window.location.reload()
+      });
       break;
 
     case 422:
@@ -358,59 +357,115 @@ export function handleApiError(error: any) {
 import { useState } from 'react';
 import { handleApiError } from '@/utils/errorHandler';
 
-function ClientForm() {
+function ClientForm({ clientId }) {
+  const [formData, setFormData] = useState({});
   const [errors, setErrors] = useState<Record<string, string[]>>({});
+  const [showConflictDialog, setShowConflictDialog] = useState(false);
+  const [conflictDetails, setConflictDetails] = useState(null);
 
-  const handleSubmit = async (formData) => {
-    setErrors({}); // Сброс ошибок
+  const saveClient = async (withForce = false) => {
+    setErrors({});
     
     try {
-      await api.post('/clients', formData);
-      toast.success('Клиент создан');
+      const payload = {
+        ...formData,
+        updated_at: formData.updated_at,
+        handleSubmit = async (e) => {
+    e.preventDefault();
+    setErrors({});
+    
+    try {
+      await api.put(`/clients/${clientId}`, {
+        ...formData,
+        updated_at: formData.updated_at
+      });
+      toast.success('Клиент обновлен');
     } catch (error) {
-      const validationErrors = handleApiError(error);
-      if (validationErrors) {
-        setErrors(validationErrors); // Подсветим поля
+      if (error.response?.status === 409) {
+        // Конфликт версий - показать диалог
+        setConflictDetails(error.response.data.details);
+        setShowConflictDialog(true);
+      } else if (error.response?.status === 422) {
+        // Валидация
+        setErrors(error.response.data.errors);
+      } else {
+        handleApiError(error);
       }
     }
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <input name="email" />
-      {errors.email && (
-        <div className="error">
-          {errors.email.map(err => <p key={err}>{err}</p>)}
-        </div>
-      )}
+    <>
+      <form onSubmit={handleSubmit}>
+        <input name="name" value={formData.name} onChange={...} />
+        {errors.name && <div className="error">{errors.name[0]}</div>}
+        
+        <input name="city" value={formData.city} onChange={...} />
+        {errors.city && <div className="error">{errors.city[0]}</div>}
+        
+        <button type="submit">Сохранить</button>
+      </form>
       
-      <input name="phone" />
-      {errors.phone && (
-        <div className="error">{errors.phone.join(', ')}</div>
+      {/* Диалог конфликта */}
+      {showConflictDialog && (
+        <ConflictDialog
+          yourVersion={conflictDetails?.your_updated_at}
+          currentVersion={conflictDetails?.current_updated_at}
+          onReload={() => window.location.reload()}
+        />
       )}
-    </form>
+    </>
   );
 }
-```
 
+// Компонент диалога конфликта
+function ConflictDialog({ yourVersion, currentVersion, onReload }) {
+  return (
+    <div className="modal">
+      <div className="modal-content">
+        <h3>⚠️ Данные были изменены</h3>
+        <p>
+          Другой пользователь изменил эту запись с момента 
+          открытия формы.
+        </p>
+        <div className="versions">
+          <div>Ваша версия: {formatDate(yourVersion)}</div>
+          <div>Текущая версия: {formatDate(currentVersion)}</div>
+        </div>
+        <div className="actions">
+          <button onClick={onReload} className="primary">
+            Обновить страницу
+          </button>
+        </div>
+        <small>
+          После обновления вы увидите актуальные данные 
+          и сможете внести свои изменения.
 ---
 
 ## 🎨 UI паттерны для ошибок
 
 ### 1. Toast уведомления (общие ошибки)
 ```typescript
-// 401, 403, 404, 409, 500 → toast
+// 401, 403, 404, 500 → toast
 toast.error(message);
 ```
 
-### 2. Inline ошибки (валидация форм)
+### 2. Модальное окно (конфликт версий)
+```typescript
+// 409 → показать диалог с кнопкой "Обновить страницу"
+<ConflictDialog 
+  onReload={reloadPage} 
+/>
+```
+
+### 3. Inline ошибки (валидация форм)
 ```typescript
 // 422 → красная подсветка поля + текст под полем
 <input className={errors.email ? 'error' : ''} />
 {errors.email && <span className="error-text">{errors.email[0]}</span>}
 ```
 
-### 3. Модальное окно (критичные ошибки)
+### 4. Модальное окно (критичные бизнес-ошибки)
 ```typescript
 // Удаление заблокировано, специфичные бизнес-ошибки
 <Modal>
@@ -420,7 +475,7 @@ toast.error(message);
 </Modal>
 ```
 
-### 4. Empty state (404)
+### 5. Empty state (404)
 ```typescript
 // Список пуст или объект не найден
 <EmptyState 

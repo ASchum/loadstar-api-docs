@@ -18,7 +18,7 @@ info:
     - **Logist** - согласование маршрутов
     - **Supervisor** - надзор и контроль
     
-  version: 1.1.0
+  version: 1.2.0
   license:
     name: Proprietary
 
@@ -247,10 +247,10 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-    put:
+    patch:
       tags:
         - Users
-      summary: Обновить пользователя
+      summary: Частично обновить пользователя
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -356,10 +356,10 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-    put:
+    patch:
       tags:
         - Clients
-      summary: Обновить клиента
+      summary: Частично обновить клиента
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -529,10 +529,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ContragentDetail'
 
-    put:
+    patch:
       tags:
         - Contragents
-      summary: Обновить контрагента
+      summary: Частично обновить контрагента
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -788,6 +788,10 @@ paths:
       tags:
         - Requests
       summary: Детальная информация о запросе
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому запросу
+        - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
       parameters:
         - $ref: '#/components/parameters/IdParam'
       responses:
@@ -797,11 +801,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RequestDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
-    put:
+    patch:
       tags:
         - Requests
-      summary: Обновить запрос
+      summary: Частично обновить запрос
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: могут обновлять любой запрос
+        - Sales, Ops: могут обновлять только свои запросы (request.initiator_id = current_user.id)
+        - Запрос в статусе Completed обновлять запрещено
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -817,6 +832,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RequestDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -829,6 +848,10 @@ paths:
       tags:
         - Route
       summary: Отправить сообщение в чат согласования маршрута
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому запросу
+        - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -855,12 +878,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RouteNegotiation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /requests/{id}/negotiations:
     get:
       tags:
         - Route
       summary: История согласования маршрута
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому запросу
+        - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
       parameters:
         - $ref: '#/components/parameters/IdParam'
       responses:
@@ -872,12 +905,22 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RouteNegotiation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /requests/{id}/route:
     get:
       tags:
         - Route
       summary: Получить маршрут запроса
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому запросу
+        - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
       parameters:
         - $ref: '#/components/parameters/IdParam'
       responses:
@@ -889,11 +932,22 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RouteStage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
     post:
       tags:
         - Route
       summary: Добавить этап маршрута
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому запросу
+        - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
+        - Для запросов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -909,13 +963,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RouteStage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 
   /requests/{id}/route/{stageId}:
     delete:
       tags:
         - Route
       summary: Удалить этап маршрута
-      description: После удаления этапа порядок (stage_order) оставшихся этапов автоматически пересчитывается
+      description: |
+        После удаления этапа порядок (stage_order) оставшихся этапов автоматически пересчитывается.
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому запросу
+        - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
+        - Для запросов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
         - name: stageId
@@ -926,6 +993,10 @@ paths:
       responses:
         '204':
           description: Этап удален
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: Этап не найден
           content:
@@ -938,7 +1009,12 @@ paths:
       tags:
         - Route
       summary: Изменить порядок этапов маршрута
-      description: Принимает массив ID этапов в нужном порядке. Бэкенд переназначает stage_order всем этапам.
+      description: |
+        Принимает массив ID этапов в нужном порядке. Бэкенд переназначает stage_order всем этапам.
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому запросу
+        - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
+        - Для запросов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -956,6 +1032,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RouteStage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: Один или несколько этапов не найдены
           content:
@@ -968,7 +1048,11 @@ paths:
       tags:
         - Requests
       summary: Одобрить запрос (превратить в заказ)
-      description: Изменяет status с New/Negotiating на Approved
+      description: |
+        Изменяет status с New/Negotiating на Approved.
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому запросу
+        - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
       parameters:
         - $ref: '#/components/parameters/IdParam'
       responses:
@@ -978,12 +1062,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RequestDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 
   /requests/{id}/reject:
     post:
       tags:
         - Requests
       summary: Отклонить запрос
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому запросу
+        - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -1000,13 +1096,23 @@ paths:
       responses:
         '200':
           description: Запрос отклонен
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /requests/{id}/files:
     get:
       tags:
         - Requests
       summary: Получить файлы запроса
-      description: Файлы, загруженные к запросу до его одобрения
+      description: |
+        Файлы, загруженные к запросу до его одобрения.
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому запросу
+        - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
       parameters:
         - $ref: '#/components/parameters/IdParam'
       responses:
@@ -1018,6 +1124,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RequestFile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -1025,7 +1135,12 @@ paths:
       tags:
         - Requests
       summary: Загрузить файл к запросу
-      description: Прикрепить файл к запросу
+      description: |
+        Прикрепить файл к запросу.
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому запросу
+        - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
+        - Для запросов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -1047,6 +1162,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RequestFile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
@@ -1057,6 +1176,11 @@ paths:
       tags:
         - Requests
       summary: Удалить файл запроса
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому запросу
+        - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
+        - Для запросов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
         - name: fileId
@@ -1068,6 +1192,10 @@ paths:
       responses:
         '204':
           description: Файл удален
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: Файл не найден
           content:
@@ -1081,7 +1209,11 @@ paths:
       tags:
         - Orders
       summary: Список заказов
-      description: Запросы со статусом Approved или Completed
+      description: |
+        Запросы со статусом Approved или Completed.
+        Правила доступа:
+        - Admin, Supervisor: доступ ко всем заказам
+        - Sales, Ops: доступ только к своим заказам (request.initiator_id = current_user.id)
       parameters:
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/LimitParam'
@@ -1104,12 +1236,20 @@ paths:
                       $ref: '#/components/schemas/OrderList'
                   meta:
                     $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /orders/{id}:
     get:
       tags:
         - Orders
       summary: Детальная информация о заказе
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому заказу
+        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
       parameters:
         - $ref: '#/components/parameters/IdParam'
       responses:
@@ -1119,12 +1259,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OrderDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /orders/{id}/documents:
     get:
       tags:
         - Orders
       summary: Документы заказа
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому заказу
+        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
       parameters:
         - $ref: '#/components/parameters/IdParam'
       responses:
@@ -1136,11 +1286,22 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RequestDocument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
     post:
       tags:
         - Orders
       summary: Добавить документ к заказу
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому заказу
+        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Для заказов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -1165,12 +1326,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RequestDocument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 
   /orders/{id}/documents/{documentId}:
     delete:
       tags:
         - Orders
       summary: Удалить документ заказа
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому заказу
+        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Для заказов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
         - name: documentId
@@ -1181,18 +1355,28 @@ paths:
       responses:
         '204':
           description: Документ удален
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: Документ не найден
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 
   /orders/{id}/invoices:
     get:
       tags:
         - Orders
       summary: Счета по заказу
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому заказу
+        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
       parameters:
         - $ref: '#/components/parameters/IdParam'
       responses:
@@ -1204,11 +1388,22 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RequestInvoice'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
     post:
       tags:
         - Orders
       summary: Создать счет
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому заказу
+        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Для заказов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -1224,12 +1419,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RequestInvoice'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 
   /orders/{id}/contracts:
     get:
       tags:
         - Orders
       summary: Договоры заказа
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому заказу
+        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
       parameters:
         - $ref: '#/components/parameters/IdParam'
       responses:
@@ -1241,6 +1448,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RequestContract'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -1248,6 +1459,11 @@ paths:
       tags:
         - Orders
       summary: Добавить договор к заказу
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому заказу
+        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Для заказов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -1263,6 +1479,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RequestContract'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
@@ -1273,6 +1493,11 @@ paths:
       tags:
         - Orders
       summary: Удалить договор заказа
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому заказу
+        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Для заказов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
         - name: contractId
@@ -1284,18 +1509,28 @@ paths:
       responses:
         '204':
           description: Договор удален
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: Договор не найден
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 
   /orders/{id}/financial-records:
     get:
       tags:
         - Orders
       summary: Фактические доходы/расходы
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому заказу
+        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
       parameters:
         - $ref: '#/components/parameters/IdParam'
       responses:
@@ -1307,11 +1542,22 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RequestFinancialRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
     post:
       tags:
         - Orders
       summary: Добавить доход/расход
+      description: |
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому заказу
+        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Для заказов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -1327,13 +1573,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RequestFinancialRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 
   /orders/{id}/complete:
     post:
       tags:
         - Orders
       summary: Завершить заказ
-      description: Изменяет status на Completed (только Supervisor)
+      description: |
+        Изменяет status на Completed (только Supervisor).
+        Правила доступа:
+        - Supervisor, Admin: доступ к любому заказу
+        - Sales, Ops: доступ запрещен
       parameters:
         - $ref: '#/components/parameters/IdParam'
       responses:
@@ -1343,6 +1601,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OrderDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 
   # ===== DICTIONARIES =====
   /dictionaries:
@@ -1536,15 +1802,47 @@ components:
       description: Количество записей на странице
 
   responses:
+    BadRequest:
+      description: Неправильный формат запроса (невалидный JSON, отсутствуют обязательные поля)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Bad Request
+            message: Неверный формат JSON
+            details:
+              line: 5
+              column: 12
+
     Unauthorized:
       description: Не авторизован (отсутствует или невалидный токен)
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-          example:
-            error: Unauthorized
-            message: Токен недействителен или истёк
+          examples:
+            token_missing:
+              summary: Токен отсутствует
+              value:
+                error: Token Missing
+                message: Требуется заголовок Authorization
+                details: null
+            token_invalid:
+              summary: Токен невалидный
+              value:
+                error: Token Invalid
+                message: Не удалось проверить подпись токена
+                details:
+                  reason: signature_invalid
+            token_expired:
+              summary: Токен истёк
+              value:
+                error: Token Expired
+                message: Срок действия токена истёк
+                details:
+                  expired_at: "2026-02-13T10:00:00Z"
+                  now: "2026-02-13T18:00:00Z"
 
     Forbidden:
       description: Доступ запрещен (недостаточно прав)
@@ -1609,24 +1907,18 @@ components:
                 example: Данные были изменены другим пользователем. Загрузите актуальную версию
               details:
                 type: object
+                nullable: true
                 properties:
-                  resource:
-                    type: string
-                    example: client
-                  resource_id:
-                    type: integer
-                    example: 123
                   your_updated_at:
                     type: string
                     format: date-time
                     example: "2026-02-13T10:00:00Z"
+                    description: Timestamp который отправил клиент
                   current_updated_at:
                     type: string
                     format: date-time
                     example: "2026-02-13T14:30:00Z"
-                  modified_by:
-                    type: string
-                    example: "Иван Иванов (Ops)"
+                    description: Актуальный timestamp в базе данных
 
   schemas:
     # ===== COMMON =====
@@ -1852,10 +2144,37 @@ components:
           type: string
         address:
           type: string
+        bank_name:
+          type: string
+          description: Банк (обязательно для status=Active)
+        bank_account:
+          type: string
+          description: Расчетный счет (обязательно для status=Active)
+        correspondent_account:
+          type: string
+          description: Корреспондентский счет (обязательно для status=Active)
+        bik:
+          type: string
+          description: БИК (обязательно для status=Active)
+        target_volume:
+          type: integer
+          description: Целевой объем перевозок в месяц (обязательно для status=Active)
+        shipping_direction:
+          type: string
+        cooperation_with:
+          type: string
+        what_they_value:
+          type: string
         status:
           $ref: '#/components/schemas/ClientStatus'
         sales_manager_id:
           type: integer
+          description: Менеджер по продажам (кто привел клиента)
+        leading_manager_id:
+          type: integer
+          description: Ведущий менеджер (обязательно для status=Active)
+        comment:
+          type: string
 
     ClientUpdate:
       type: object
@@ -2130,6 +2449,14 @@ components:
           type: string
         status:
           $ref: '#/components/schemas/RequestStatus'
+        is_route_negotiated:
+          type: boolean
+          description: 'Статус согласования маршрута с логистом (false=не согласован, true=согласован с логистом)'
+        signet_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: 'Дата/время согласования заявки для запуска в исполнение (NULL=не согласована, заполненное значение=готова к исполнению)'
         created_at:
           type: string
           format: date-time
