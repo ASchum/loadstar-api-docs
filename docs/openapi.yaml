@@ -18,7 +18,7 @@ info:
     - **Logist** - согласование маршрутов
     - **Supervisor** - надзор и контроль
     
-  version: 1.2.0
+  version: 1.3.0
   license:
     name: Proprietary
 
@@ -2104,7 +2104,7 @@ components:
             target_volume:
               type: integer
               nullable: true
-            shipping_direction:
+            shipping_directions:
               type: string
               nullable: true
             cooperation_with:
@@ -2159,7 +2159,7 @@ components:
         target_volume:
           type: integer
           description: Целевой объем перевозок в месяц (обязательно для status=Active)
-        shipping_direction:
+        shipping_directions:
           type: string
         cooperation_with:
           type: string
@@ -2203,7 +2203,7 @@ components:
           type: string
         target_volume:
           type: integer
-        shipping_direction:
+        shipping_directions:
           type: string
         cooperation_with:
           type: string
@@ -2283,7 +2283,7 @@ components:
             address:
               type: string
               nullable: true
-            shipping_direction:
+            shipping_directions:
               type: string
               nullable: true
             contracts:
@@ -2309,7 +2309,7 @@ components:
           type: string
         address:
           type: string
-        shipping_direction:
+        shipping_directions:
           type: string
 
     ContragentUpdate:
@@ -2327,7 +2327,7 @@ components:
           type: string
         address:
           type: string
-        shipping_direction:
+        shipping_directions:
           type: string
         active:
           type: boolean
@@ -2339,7 +2339,7 @@ components:
           type: integer
         contragent_id:
           type: integer
-        contract_number:
+        number:
           type: string
         start_date:
           type: string
@@ -2348,7 +2348,7 @@ components:
           type: string
           format: date
           nullable: true
-        payment_condition:
+        payment_conditions:
           type: string
           nullable: true
         payment_form:
@@ -2358,10 +2358,10 @@ components:
     ContragentContractCreate:
       type: object
       required:
-        - contract_number
+        - number
         - start_date
       properties:
-        contract_number:
+        number:
           type: string
           example: "Договор №123/2026"
         start_date:
@@ -2373,7 +2373,7 @@ components:
           format: date
           nullable: true
           example: "2027-12-31"
-        payment_condition:
+        payment_conditions:
           type: string
           example: "Оплата в течение 30 дней"
         payment_form:
@@ -2481,7 +2481,7 @@ components:
             destination_address:
               type: string
               nullable: true
-            transport_type:
+            transportation_type:
               type: string
               nullable: true
             gross_weight:
@@ -2541,7 +2541,7 @@ components:
           type: string
         destination_address:
           type: string
-        transport_type:
+        transportation_type:
           type: string
         cargo_name:
           type: string
@@ -2593,7 +2593,7 @@ components:
           type: string
         destination_address:
           type: string
-        transport_type:
+        transportation_type:
           type: string
         cargo_name:
           type: string
@@ -2952,7 +2952,7 @@ components:
         contract_date:
           type: string
           format: date
-        payment_condition:
+        payment_conditions:
           type: string
           nullable: true
         payment_form:
@@ -2978,7 +2978,7 @@ components:
           type: string
           format: date
           example: "2026-02-13"
-        payment_condition:
+        payment_conditions:
           type: string
           example: "Оплата в течение 14 дней"
         payment_form:
@@ -3077,6 +3077,6 @@ components:
           type: string
           nullable: true
           example: "Грузовая фура грузоподъемностью 20 тонн"
-        active:
+        is_active:
           type: boolean
           example: true

@@ -35,7 +35,7 @@ Table contragent {
   inn varchar(12) [not null, unique]
   city varchar(100)
   address text
-  directions text
+  shipping_directions text
   active boolean [default: true]
   created_at timestamp [default: `CURRENT_TIMESTAMP`]
   updated_at timestamp [default: `CURRENT_TIMESTAMP`]
@@ -56,10 +56,10 @@ Table contragent_contract {
   id int [pk, increment]
   contragent_id int [not null, ref: > contragent.id]
   number varchar(50) [not null]
-  start date [not null]
-  end date
-  conditions varchar(255)
-  form varchar(255)
+  start_date date [not null]
+  end_date date
+  payment_conditions varchar(255)
+  payment_form varchar(255)
   created_at timestamp [default: `CURRENT_TIMESTAMP`]
   updated_at timestamp [default: `CURRENT_TIMESTAMP`]
 
@@ -169,7 +169,7 @@ Table request {
   is_customs_by_us boolean [not null, note: 'true = нашими силами, false = силами импортера']
   customs_location varchar(100)
   tnved_code varchar(20)
-  request_comment text
+  comment text
 
   // Статусы
   status enum [default: 'New', note: 'New | Negotiating | Approved | Completed | Rejected']
@@ -356,7 +356,7 @@ Table request_invoice {
   contragent_id int [ref: > contragent.id, note: 'Только для from_contragent']
   invoice_number varchar(50)
   invoice_date date
-  responsible_employee_id int [ref: > user.id, note: 'Кто выставил/запросил счет']
+  responsible_user_id int [ref: > user.id, note: 'Кто выставил/запросил счет']
   created_at timestamp [default: `CURRENT_TIMESTAMP`]
   updated_at timestamp [default: `CURRENT_TIMESTAMP`]
 
