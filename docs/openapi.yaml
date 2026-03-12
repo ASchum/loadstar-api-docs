@@ -18,12 +18,12 @@ info:
     - **Logist** - согласование маршрутов
     - **Supervisor** - надзор и контроль
     
-  version: 1.4.0
+  version: 1.5.0
   license:
     name: Proprietary
 
 servers:
-  - url: https://api.loadstar.local/api
+  - url: https://api.loadstar.xd0.ru/api
     description: Production сервер
   - url: http://localhost:8000/api
     description: Development сервер
