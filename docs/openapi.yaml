@@ -973,6 +973,73 @@ paths:
           $ref: '#/components/responses/ValidationError'
 
   /requests/{id}/route/{stageId}:
+    patch:
+      tags:
+        - Route
+      summary: Обновить этап маршрута
+      description: |
+        Обновляет поля этапа: локацию, плановые и фактические даты, примечание.
+        Поля stage_type и stage_order не изменяются через этот эндпоинт.
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому запросу
+        - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
+        - Для запросов в статусе Completed операция запрещена
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - name: stageId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                location:
+                  type: string
+                planned_departure_date:
+                  type: string
+                  format: date
+                planned_arrival_date:
+                  type: string
+                  format: date
+                planned_date:
+                  type: string
+                  format: date
+                actual_departure_date:
+                  type: string
+                  format: date
+                actual_arrival_date:
+                  type: string
+                  format: date
+                actual_date:
+                  type: string
+                  format: date
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Этап обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteStage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Этап не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
     delete:
       tags:
         - Route
@@ -983,6 +1050,7 @@ paths:
         - Admin, Supervisor: доступ к любому запросу
         - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
         - Для запросов в статусе Completed операция запрещена
+        - Нельзя удалить этап с заполненными фактическими датами
       parameters:
         - $ref: '#/components/parameters/IdParam'
         - name: stageId
@@ -999,6 +1067,12 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           description: Этап не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Нельзя удалить этап с фактическими датами
           content:
             application/json:
               schema:
@@ -1050,6 +1124,7 @@ paths:
       summary: Одобрить запрос (превратить в заказ)
       description: |
         Изменяет status с New/Negotiating на Approved.
+        Предусловия: запрос должен содержать ≥1 этап маршрута и ≥1 единицу транспорта.
         Правила доступа:
         - Admin, Supervisor: доступ к любому запросу
         - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
@@ -1069,7 +1144,14 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
-          $ref: '#/components/responses/ValidationError'
+          description: |
+            - Запрос не в статусе New/Negotiating
+            - Нет этапов маршрута
+            - Нет единиц транспорта
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /requests/{id}/reject:
     post:
@@ -1610,6 +1692,71 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationError'
 
+  /orders/{id}/sign:
+    post:
+      tags:
+        - Orders
+      summary: Подписать заказ
+      description: |
+        Устанавливает signet_at = now(). Только для заказов со статусом Approved.
+        Правила доступа:
+        - Admin, Supervisor, Ops: доступ к любому заказу
+        - Sales: доступ запрещен
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Заказ подписан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Заказ не в статусе Approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /orders/{id}/reopen:
+    post:
+      tags:
+        - Orders
+      summary: Вернуть заказ на согласование
+      description: |
+        Изменяет status с Approved обратно на Negotiating.
+        signet_at сохраняется (не сбрасывается).
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому заказу
+        - Ops, Sales: доступ запрещен
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Заказ возвращён на согласование
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Заказ не в статусе Approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   # ===== DICTIONARIES =====
   /dictionaries:
     get:
@@ -1669,6 +1816,9 @@ paths:
       tags:
         - Files
       summary: Загрузить файл
+      description: |
+        Загружает файл и возвращает его ID (file_id).
+        Файл не привязывается к запросу автоматически — для привязки использовать POST /requests/{id}/files.
       requestBody:
         required: true
         content:
@@ -1697,6 +1847,10 @@ paths:
                     type: integer
                   file_path:
                     type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 
   /files/{id}/download:
     get:
@@ -2166,10 +2320,17 @@ components:
         what_they_value:
           type: string
         status:
-          $ref: '#/components/schemas/ClientStatus'
+          allOf:
+            - $ref: '#/components/schemas/ClientStatus'
+          description: |
+            Для роли Sales всегда принудительно устанавливается Lead.
+            Установить Active/Inactive могут только Admin, Supervisor, Ops.
         sales_manager_id:
           type: integer
-          description: Менеджер по продажам (кто привел клиента)
+          description: |
+            Менеджер по продажам (кто привел клиента).
+            Для роли Sales игнорируется — всегда автоматически устанавливается текущий пользователь.
+            Admin/Supervisor/Ops могут указать любого пользователя.
         leading_manager_id:
           type: integer
           description: Ведущий менеджер (обязательно для status=Active)
@@ -2210,7 +2371,11 @@ components:
         what_they_value:
           type: string
         status:
-          $ref: '#/components/schemas/ClientStatus'
+          allOf:
+            - $ref: '#/components/schemas/ClientStatus'
+          description: |
+            Изменение статуса доступно только Admin, Supervisor, Ops.
+            Sales не может изменить статус — поле игнорируется.
         leading_manager_id:
           type: integer
         comment:
@@ -2451,7 +2616,10 @@ components:
           $ref: '#/components/schemas/RequestStatus'
         is_route_negotiated:
           type: boolean
-          description: 'Статус согласования маршрута с логистом (false=не согласован, true=согласован с логистом)'
+          description: |
+            Статус согласования маршрута с логистом (false=не согласован, true=согласован).
+            Устанавливается Sales/Ops (по своим запросам) или Admin/Supervisor (по любым).
+            Logist изменять флаг не может.
         signet_at:
           type: string
           format: date-time
@@ -2609,6 +2777,12 @@ components:
           type: string
         comment:
           type: string
+        is_route_negotiated:
+          type: boolean
+          description: |
+            Флаг согласованности маршрута с логистом. Sales и Ops ставят самостоятельно
+            по итогам обсуждения в чате. Admin/Supervisor могут менять по любому запросу.
+            Logist — поле игнорируется.
         transport_units:
           type: array
           items:
@@ -2939,6 +3113,11 @@ components:
         invoice_date:
           type: string
           format: date
+        responsible_user_id:
+          type: integer
+          description: |
+            Ответственный пользователь. Если не передан — автоматически ставится текущий пользователь.
+            Указать другого пользователя могут только Admin и Supervisor.
 
     RequestContract:
       type: object
