@@ -22,10 +22,10 @@ info:
 
     Используйте `POST /auth/login` с одним из следующих логинов:
 
-    | Роль | login | password |
-    |------|-------|----------|
-    | Admin | `admin` | `password` |
-    | Supervisor | `supervisor` | `password` |
+    | Роль | login |
+    |------|-------|
+    | Admin | `admin` |
+    | Supervisor | `supervisor` |
 
     > Логины Sales/Ops/Logist генерируются случайно. Посмотреть их можно через `GET /users` (авторизовавшись как Admin).
 
