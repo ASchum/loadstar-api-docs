@@ -28,7 +28,7 @@ info:
     | Admin | `admin` |
     | Supervisor | `supervisor` |
 
-    > Логины Sales/Ops/Logist генерируются случайно. Посмотреть их можно через `GET /users` (авторизовавшись как Admin).
+    > Логины Sales/Ops/Logist генерируются случайно. Посмотреть их можно через `GET /users` (авторизовавшись как admin (password)).
 
   version: 1.5.1
   license:
