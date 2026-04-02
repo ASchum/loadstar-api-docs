@@ -5,11 +5,12 @@ info:
     REST API для системы управления логистическими процессами LoadStar.
     
     ## Аутентификация
-    API использует JWT токены для аутентификации. После успешного логина вы получаете:
-    - `access_token` - для всех API запросов (срок действия: 8 часов)
-    - `refresh_token` - для обновления access token (срок действия: 7 дней)
+    API использует JWT токены для аутентификации. После успешного логина вы получаете `access_token` (срок действия: 8 часов).
     
-    Все защищенные endpoints требуют `Authorization: Bearer <access_token>` header.
+    Для обновления токена используйте `POST /auth/refresh`, передав текущий токен в заголовке `Authorization: Bearer <token>`.
+    Окно обновления — 7 дней с момента выдачи токена (даже после истечения 8 часов).
+    
+    Все защищённые endpoints требуют заголовок `Authorization: Bearer <access_token>`.
     
     ## Роли пользователей
     - **Admin** - полный контроль системой
@@ -29,7 +30,7 @@ info:
 
     > Логины Sales/Ops/Logist генерируются случайно. Посмотреть их можно через `GET /users` (авторизовавшись как Admin).
 
-  version: 1.5.0
+  version: 1.5.1
   license:
     name: Proprietary
 
@@ -101,9 +102,13 @@ paths:
                   access_token:
                     type: string
                     description: JWT access token (срок действия 8 часов)
-                  refresh_token:
+                  token_type:
                     type: string
-                    description: JWT refresh token (срок действия 7 дней)
+                    example: bearer
+                  expires_in:
+                    type: integer
+                    description: Срок действия токена в секундах
+                    example: 28800
                   user:
                     $ref: '#/components/schemas/UserLite'
         '401':
@@ -116,20 +121,10 @@ paths:
       tags:
         - Authentication
       summary: Обновление access token
-      description: Получение нового access token используя refresh token
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - refresh_token
-              properties:
-                refresh_token:
-                  type: string
-                  description: Refresh token полученный при логине
+      description: |
+        Обменивает текущий (в том числе истёкший) access token на новый.
+        Токен передаётся в заголовке `Authorization: Bearer <token>`.
+        Окно обновления — 7 дней с момента выдачи токена.
       responses:
         '200':
           description: Новый access token
@@ -140,6 +135,14 @@ paths:
                 properties:
                   access_token:
                     type: string
+                  token_type:
+                    type: string
+                    example: bearer
+                  expires_in:
+                    type: integer
+                    example: 28800
+                  user:
+                    $ref: '#/components/schemas/UserLite'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
