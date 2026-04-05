@@ -524,7 +524,7 @@ Supervisor (контроль)
 
 **Не выбран (в разработке).** Ориентируйся на:
 - [openapi.yaml](openapi.yaml) — REST API спецификация (источник истины)
-- [error-codes.md](error-codes.md) — обработка ошибок на фронтенде (возможно)
+- [error-codes.md](error-codes.md) — рекомендации по обработке ошибок (не обязывающий контракт)
 
 ### 4.3 Database
 
