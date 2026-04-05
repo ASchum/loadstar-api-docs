@@ -1,7 +1,7 @@
 # Архитектура и описание работы системы LoadStar
 
-**Дата документа:** 18.02.2026  
-**Версия:** 1.1
+**Дата документа:** 6 апреля 2026  
+**Версия:** 2.0
 
 ---
 
@@ -62,7 +62,7 @@
 ### 1.2 Компоненты системы
 
 #### Frontend (Веб-интерфейс)
-- **Технология:** (уточнить на следующем этапе)
+- **Технология:** уточняется
 - **Функции:**
   - Управление карточками (клиенты, контрагенты, пользователи)
   - Создание и редактирование запросов
@@ -72,9 +72,9 @@
   - Управление справочниками (Admin)
 
 #### Backend (API)
-- **Технология:** (уточнить на следующем этапе)
+- **Технология:** Laravel 12 (PHP 8.2+), задеплоен на `api.loadstar.xd0.ru`
 - **Функции:**
-  - REST/GraphQL API endpoints
+  - REST API endpoints
   - Аутентификация и авторизация (RBAC)
   - Валидация данных
   - Бизнес-логика процессов
@@ -511,46 +511,25 @@ Supervisor (контроль)
 
 ## 4. Технологический стек
 
-### 4.1 Backend Framework (требуется выбор)
+### 4.1 Backend Framework ✅
 
-**Вариант 1: Python + Django / Flask**
-- Django REST Framework для API
-- Celery для асинхронных операций (отправка уведомлений)
-- Pillow для работы с изображениями
+**Выбран: Laravel 12 (PHP 8.2+)**
+- JWT-аутентификация (`php-open-source-saver/jwt-auth`, TTL 8ч / Refresh 7д)
+- RBAC через middleware `CheckRole`
+- Оптимистичная блокировка (409 Conflict) на clients, contragents, requests, users
+- Репозиторий: [ASchum/loadstar-api-laravel](https://github.com/ASchum/loadstar-api-laravel)
+- Хостинг: `api.loadstar.xd0.ru`
 
-**Вариант 2: Node.js + Express / NestJS**
-- Express для REST API
-- NestJS для более структурированного подхода
-- Multer для работы с файлами
+### 4.2 Frontend Framework 🔄
 
-**Вариант 3: ASP.NET Core (C#)**
-- Entity Framework для работы с БД
-- ASP.NET Core для REST API
-- Swagger для документации API
-
-### 4.2 Frontend Framework (требуется выбор)
-
-**Вариант 1: React**
-- React Router для навигации
-- Redux / Zustand для state management
-- Ant Design / Material-UI для UI компонентов
-- Axios для HTTP запросов
-
-**Вариант 2: Vue.js**
-- Vue Router для навигации
-- Vuex / Pinia для state management
-- Vuetify / Element Plus для UI компонентов
-
-**Вариант 3: Angular**
-- RxJS для работы с асинхронностью
-- Angular Material для UI компонентов
-- HttpClientModule для API запросов
+**Не выбран (в разработке).** Ориентируйся на:
+- [openapi.yaml](openapi.yaml) — REST API спецификация (источник истины)
+- [error-codes.md](error-codes.md) — обработка ошибок на фронтенде (возможно)
 
 ### 4.3 Database
 
 - **СУБД:** MySQL 8.0+
-- **Driver:** mysql2 / PyMySQL (зависит от backend)
-- **ORM:** SQLAlchemy (Python) / TypeORM (Node) / Entity Framework (C#)
+- **ORM:** Laravel Eloquent
 
 ### 4.4 Хостинг и инфраструктура (рекомендации)
 
@@ -582,8 +561,8 @@ Supervisor (контроль)
   - Access Token: 8 часов (хранится в localStorage на фронтенде)
   - Refresh Token: 7 дней (для продления access token)
   - Передача: `Authorization: Bearer <token>` header
-- **Библиотека PHP:** firebase/php-jwt
-- **Архитектура:** REST API + отдельный фронтенд (React/Vue)
+- **Библиотека PHP:** php-open-source-saver/jwt-auth
+- **Архитектура:** REST API + отдельный фронтенд
 
 ### 5.2 Авторизация (RBAC — Role-Based Access Control)
 

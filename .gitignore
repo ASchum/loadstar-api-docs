@@ -3,6 +3,7 @@
 /private/
 *.pdf
 *.docx
+docs/OPEN_QUESTIONS.md
 
 
 # IDE

@@ -79,10 +79,10 @@
 ```json
 {
   "error": "Forbidden",
-  "message": "У вас нет прав для выполнения этой операции",
+  "message": "Недостаточно прав",
   "details": {
-    "required_role": "Admin",
-    "your_role": "Sales"
+    "your_role": "Sales",
+    "allowed_roles": ["Admin", "Supervisor"]
   }
 }
 ```
@@ -363,17 +363,10 @@ function ClientForm({ clientId }) {
   const [showConflictDialog, setShowConflictDialog] = useState(false);
   const [conflictDetails, setConflictDetails] = useState(null);
 
-  const saveClient = async (withForce = false) => {
-    setErrors({});
-    
-    try {
-      const payload = {
-        ...formData,
-        updated_at: formData.updated_at,
-        handleSubmit = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setErrors({});
-    
+
     try {
       await api.put(`/clients/${clientId}`, {
         ...formData,
