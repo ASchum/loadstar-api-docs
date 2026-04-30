@@ -30,7 +30,12 @@ info:
 
     > Логины Sales/Ops/Logist генерируются случайно. Посмотреть их можно через `GET /users` (авторизовавшись как admin (password)).
 
-  version: 1.5.1
+  version: 1.5.2
+  x-updated: "2026-04-30"
+  x-changelog: |
+    1.5.2 (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода
+      (Token Missing / Token Expired / Token Invalid), убраны несуществующие details.
+    1.5.1: предыдущая версия
   license:
     name: Proprietary
 
@@ -1985,33 +1990,34 @@ components:
               column: 12
 
     Unauthorized:
-      description: Не авторизован (отсутствует или невалидный токен)
+      description: |
+        Не авторизован. Три возможных причины — различаются по полю `error`:
+        - `Token Missing` — заголовок `Authorization` отсутствует → редирект на /login
+        - `Token Expired` — токен истёк → выполнить `POST /auth/refresh` и повторить запрос
+        - `Token Invalid` — токен поддельный или уже в blacklist → разлогинить, редирект на /login
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
           examples:
             token_missing:
-              summary: Токен отсутствует
+              summary: Заголовок Authorization отсутствует
               value:
                 error: Token Missing
                 message: Требуется заголовок Authorization
                 details: null
-            token_invalid:
-              summary: Токен невалидный
-              value:
-                error: Token Invalid
-                message: Не удалось проверить подпись токена
-                details:
-                  reason: signature_invalid
             token_expired:
-              summary: Токен истёк
+              summary: Токен истёк (нужен refresh)
               value:
                 error: Token Expired
-                message: Срок действия токена истёк
-                details:
-                  expired_at: "2026-02-13T10:00:00Z"
-                  now: "2026-02-13T18:00:00Z"
+                message: Токен истёк, выполните refresh
+                details: null
+            token_invalid:
+              summary: Токен поддельный или в blacklist (нужен logout)
+              value:
+                error: Token Invalid
+                message: Токен недействителен
+                details: null
 
     Forbidden:
       description: Доступ запрещен (недостаточно прав)
