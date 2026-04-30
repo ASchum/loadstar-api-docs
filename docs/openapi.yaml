@@ -30,11 +30,12 @@ info:
 
     > Логины Sales/Ops/Logist генерируются случайно. Посмотреть их можно через `GET /users` (авторизовавшись как admin (password)).
 
-  version: 1.5.2
+  version: 1.5.3
   x-updated: "2026-04-30"
   x-changelog: |
-    1.5.2 (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода
-      (Token Missing / Token Expired / Token Invalid), убраны несуществующие details.
+    1.5.3 (2026-04-30): Добавлен error Account Disabled (403) — деактивация
+      пользователя. Forbidden теперь с examples.
+    1.5.2 (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода.
     1.5.1: предыдущая версия
   license:
     name: Proprietary
@@ -2020,14 +2021,29 @@ components:
                 details: null
 
     Forbidden:
-      description: Доступ запрещен (недостаточно прав)
+      description: |
+        Доступ запрещён. Два возможных случая — различаются по полю `error`:
+        - `Forbidden` — роль пользователя не даёт доступ к эндпойнту
+        - `Account Disabled` — учётная запись деактивирована → удалить токен, редирект на /login
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-          example:
-            error: Forbidden
-            message: У вас нет прав для выполнения этой операции
+          examples:
+            forbidden:
+              summary: Недостаточно прав (роль)
+              value:
+                error: Forbidden
+                message: Недостаточно прав
+                details:
+                  your_role: Sales
+                  allowed_roles: [Admin, Supervisor]
+            account_disabled:
+              summary: Аккаунт деактивирован (удалить токен, logout)
+              value:
+                error: Account Disabled
+                message: Учётная запись деактивирована
+                details: null
 
     NotFound:
       description: Ресурс не найден
