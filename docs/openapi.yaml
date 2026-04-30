@@ -30,9 +30,12 @@ info:
 
     > Логины Sales/Ops/Logist генерируются случайно. Посмотреть их можно через `GET /users` (авторизовавшись как admin (password)).
 
-  version: 1.5.3
+  version: 1.5.4
   x-updated: "2026-04-30"
   x-changelog: |
+    1.5.4 (2026-04-30): UserLite расширена (login, phone, active). Login/Refresh
+      ответы: 401 → InvalidCredentials, добавлен 403 Forbidden. error-поле
+      в login 422/401/403 выровнено с реализацией.
     1.5.3 (2026-04-30): Добавлен error Account Disabled (403) — деактивация
       пользователя. Forbidden теперь с examples.
     1.5.2 (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода.
@@ -118,7 +121,9 @@ paths:
                   user:
                     $ref: '#/components/schemas/UserLite'
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          $ref: '#/components/responses/InvalidCredentials'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '422':
           $ref: '#/components/responses/ValidationError'
 
@@ -151,6 +156,8 @@ paths:
                     $ref: '#/components/schemas/UserLite'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /auth/logout:
     post:
@@ -1990,6 +1997,20 @@ components:
               line: 5
               column: 12
 
+    InvalidCredentials:
+      description: |
+        Неверный логин или пароль. Два возможных случая — различаются по полю `error`:
+        - `Invalid Credentials` — логин или пароль неверны
+        - `Account Disabled` — учётная запись деактивирована (возвращается как 403)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Invalid Credentials
+            message: Неверный логин или пароль
+            details: null
+
     Unauthorized:
       description: |
         Не авторизован. Три возможных причины — различаются по полю `error`:
@@ -2157,6 +2178,7 @@ components:
 
     UserLite:
       type: object
+      description: Компактный объект пользователя — возвращается при login/refresh/me
       properties:
         id:
           type: integer
@@ -2164,21 +2186,21 @@ components:
           type: string
         role:
           $ref: '#/components/schemas/UserRole'
+        login:
+          type: string
         email:
           type: string
           format: email
+        phone:
+          type: string
+        active:
+          type: boolean
 
     User:
       allOf:
         - $ref: '#/components/schemas/UserLite'
         - type: object
           properties:
-            phone:
-              type: string
-            login:
-              type: string
-            active:
-              type: boolean
             created_at:
               type: string
               format: date-time
