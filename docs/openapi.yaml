@@ -2347,7 +2347,6 @@ components:
       type: object
       required:
         - name
-        - status
       properties:
         name:
           type: string
@@ -2382,8 +2381,9 @@ components:
           allOf:
             - $ref: '#/components/schemas/ClientStatus'
           description: |
-            Для роли Sales всегда принудительно устанавливается Lead.
-            Установить Active/Inactive могут только Admin, Supervisor, Ops.
+            Для роли Sales поле опционально — автоматически устанавливается Lead.
+            Admin/Supervisor/Ops обязаны передать явно (Lead, Active или Inactive).
+            Если Sales передаст Active/Inactive — будет принудительно заменено на Lead.
         sales_manager_id:
           type: integer
           description: |
