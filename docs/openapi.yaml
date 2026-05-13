@@ -1312,6 +1312,85 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  # ===== REQUEST CONTRACTS =====
+  /requests/{id}/contracts:
+    get:
+      tags:
+        - Requests
+      summary: Список договоров запроса
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Список договоров
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RequestContract'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Requests
+      summary: Добавить договор к запросу
+      description: |
+        Добавляется Sales до перевода в заказ. Наличие хотя бы одного договора
+        является обязательным условием для выполнения POST /requests/{id}/approve.
+        Нельзя добавить к запросу в статусе Completed или Rejected.
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestContractCreate'
+      responses:
+        '201':
+          description: Договор добавлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestContract'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /requests/{id}/contracts/{contractId}:
+    delete:
+      tags:
+        - Requests
+      summary: Удалить договор запроса
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID договора
+      responses:
+        '204':
+          description: Договор удалён
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   # ===== ORDERS =====
   /orders:
     get:
