@@ -30,9 +30,25 @@ info:
 
     > Логины Sales/Ops/Logist генерируются случайно. Посмотреть их можно через `GET /users` (авторизовавшись как admin (password)).
 
-  version: 1.5.4
-  x-updated: "2026-04-30"
+    ## Changelog
+
+    **1.6.0** (2026-05-28): Добавлен `logist_id` в запросы/заказы. Новый эндпоинт `GET /users/logists`.
+    RBAC: Logist видит только назначенные ему запросы и заказы. `reopen()` больше не меняет статус —
+    только сбрасывает `is_route_negotiated = false`.
+
+    **1.5.4** (2026-04-30): UserLite расширена (`login`, `phone`, `active`). Login/Refresh ответы:
+    401 → InvalidCredentials, добавлен 403 Forbidden. `error`-поле в login 422/401/403 выровнено с реализацией.
+
+    **1.5.3** (2026-04-30): Добавлен error `Account Disabled` (403) при деактивации пользователя.
+
+    **1.5.2** (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода.
+
+  version: 1.6.0
+  x-updated: "2026-05-28"
   x-changelog: |
+    1.6.0 (2026-05-28): Добавлен logist_id в запросы/заказы. Новый эндпоинт
+      GET /users/logists. RBAC: Logist видит только назначенные запросы и заказы.
+      reopen() больше не меняет статус — только сбрасывает is_route_negotiated.
     1.5.4 (2026-04-30): UserLite расширена (login, phone, active). Login/Refresh
       ответы: 401 → InvalidCredentials, добавлен 403 Forbidden. error-поле
       в login 422/401/403 выровнено с реализацией.
@@ -1860,9 +1876,11 @@ paths:
     post:
       tags:
         - Orders
-      summary: Вернуть заказ на согласование
+      summary: Сбросить согласование маршрута
       description: |
-        Изменяет status с Approved обратно на Negotiating.
+        Сбрасывает is_route_negotiated = false. Статус остаётся Approved — заказ не возвращается инициатору.
+        Supervisor самостоятельно корректирует маршрут, затем устанавливает is_route_negotiated = true
+        через PATCH /requests/{id}.
         signet_at сохраняется (не сбрасывается).
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
@@ -1871,7 +1889,7 @@ paths:
         - $ref: '#/components/parameters/IdParam'
       responses:
         '200':
-          description: Заказ возвращён на согласование
+          description: Согласование маршрута сброшено, заказ остаётся в статусе Approved
           content:
             application/json:
               schema:
