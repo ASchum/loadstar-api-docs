@@ -153,6 +153,7 @@ Table request {
   id int [pk, increment]
   initiator_id int [not null, ref: > user.id, note: 'Сотрудник-инициатор']
   client_id int [not null, ref: > client.id, note: 'Ссылка на клиента/лида']
+  logist_id int [null, ref: > user.id, note: 'Назначенный логист (NULL = не назначен)']
 
   // Данные запроса
   incoterms char(3) [note: 'EXW, FCA, FOB, CIF, CIP, CPT, DAP']
@@ -184,6 +185,7 @@ Table request {
   indexes {
     (initiator_id)
     (client_id)
+    (logist_id)
     (status)
     (is_route_negotiated)
     (signet_at)

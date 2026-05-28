@@ -257,6 +257,31 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationError'
 
+  /users/logists:
+    get:
+      tags:
+        - Users
+      summary: Список активных логистов
+      description: |
+        Возвращает список активных пользователей с ролью Logist.
+        Доступен всем авторизованным пользователям — необходим для выбора логиста при создании/редактировании запроса.
+      responses:
+        '200':
+          description: Список логистов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /users/{id}:
     get:
       tags:
@@ -2744,6 +2769,14 @@ components:
           type: integer
         initiator:
           $ref: '#/components/schemas/UserLite'
+        logist_id:
+          type: integer
+          nullable: true
+          description: 'ИД назначенного логиста (активный Logist). NULL = не назначен.'
+        logist:
+          allOf:
+            - $ref: '#/components/schemas/UserLite'
+          nullable: true
         departure_point:
           type: string
         destination_point:
@@ -2835,6 +2868,10 @@ components:
           type: integer
         incoterms:
           type: string
+        logist_id:
+          type: integer
+          nullable: true
+          description: 'Назначить логиста. ИД из GET /users/logists'
         shipper_name:
           type: string
         departure_point:
@@ -2915,6 +2952,10 @@ components:
           type: string
         comment:
           type: string
+        logist_id:
+          type: integer
+          nullable: true
+          description: 'Назначить/сменить логиста. null — снять назначение. ИД из GET /users/logists'
         is_route_negotiated:
           type: boolean
           description: |
