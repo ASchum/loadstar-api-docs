@@ -32,6 +32,12 @@ info:
 
     ## Changelog
 
+    **1.7.0** (2026-05-28): Блокировка редактирования маршрута для Sales/Ops при `is_route_negotiated = true`.
+    Sales/Ops не могут добавлять, удалять и переставлять этапы после согласования маршрута.
+    В `PATCH /requests/{id}/route/{stageId}` при согласованном маршруте Sales/Ops могут передавать
+    только фактические даты — остальные поля возвращают 422 с `forbidden_fields`.
+    Admin, Supervisor, Logist ограничений не имеют.
+
     **1.6.0** (2026-05-28): Добавлен `logist_id` в запросы/заказы. Новый эндпоинт `GET /users/logists`.
     RBAC: Logist видит только назначенные ему запросы и заказы. `reopen()` больше не меняет статус —
     только сбрасывает `is_route_negotiated = false`.
@@ -43,9 +49,12 @@ info:
 
     **1.5.2** (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода.
 
-  version: 1.6.0
+  version: 1.7.0
   x-updated: "2026-05-28"
   x-changelog: |
+    1.7.0 (2026-05-28): Блокировка редактирования маршрута Sales/Ops при
+      is_route_negotiated=true. PATCH /route/{stageId} — только фактические даты,
+      остальные поля → 422 с forbidden_fields. Logist/Admin/Supervisor без ограничений.
     1.6.0 (2026-05-28): Добавлен logist_id в запросы/заказы. Новый эндпоинт
       GET /users/logists. RBAC: Logist видит только назначенные запросы и заказы.
       reopen() больше не меняет статус — только сбрасывает is_route_negotiated.
@@ -1013,9 +1022,10 @@ paths:
       summary: Добавить этап маршрута
       description: |
         Правила доступа:
-        - Admin, Supervisor: доступ к любому запросу
+        - Admin, Supervisor, Logist: могут добавлять этапы в любом статусе (кроме Completed)
         - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
         - Для запросов в статусе Completed операция запрещена
+        - Sales, Ops: запрещено если `is_route_negotiated = true` — маршрут уже согласован
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -1038,7 +1048,13 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
-          $ref: '#/components/responses/ValidationError'
+          description: |
+            - Запрос в статусе Completed
+            - Sales/Ops: маршрут уже согласован (`is_route_negotiated = true`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /requests/{id}/route/{stageId}:
     patch:
@@ -1049,9 +1065,12 @@ paths:
         Обновляет поля этапа: локацию, плановые и фактические даты, примечание.
         Поля stage_type и stage_order не изменяются через этот эндпоинт.
         Правила доступа:
-        - Admin, Supervisor: доступ к любому запросу
+        - Admin, Supervisor, Logist: могут обновлять любые поля (кроме Completed)
         - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
         - Для запросов в статусе Completed операция запрещена
+        - Sales, Ops при `is_route_negotiated = true`: допустимы только фактические даты
+          (`actual_departure_date`, `actual_arrival_date`, `actual_date`).
+          Передача других полей вернёт 422 с перечнем запрещённых полей в `forbidden_fields`.
       parameters:
         - $ref: '#/components/parameters/IdParam'
         - name: stageId
@@ -1140,7 +1159,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '422':
-          description: Нельзя удалить этап с фактическими датами
+          description: |
+            - Нельзя удалить этап с фактическими датами
+            - Sales/Ops: маршрут уже согласован (`is_route_negotiated = true`)
           content:
             application/json:
               schema:
@@ -1154,9 +1175,10 @@ paths:
       description: |
         Принимает массив ID этапов в нужном порядке. Бэкенд переназначает stage_order всем этапам.
         Правила доступа:
-        - Admin, Supervisor: доступ к любому запросу
+        - Admin, Supervisor, Logist: могут изменять порядок (кроме Completed)
         - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
         - Для запросов в статусе Completed операция запрещена
+        - Sales, Ops: запрещено если `is_route_negotiated = true`
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
