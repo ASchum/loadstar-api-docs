@@ -1935,6 +1935,14 @@ paths:
       tags:
         - Dictionaries
       summary: Список всех справочников
+      parameters:
+        - name: with_inactive
+          in: query
+          description: Включить неактивные элементы (только Admin)
+          schema:
+            type: integer
+            enum: [0, 1]
+            example: 1
       responses:
         '200':
           description: Все справочники
@@ -1959,6 +1967,22 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/DictionaryItem'
+                  services:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DictionaryItem'
+                  transportation_types:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DictionaryItem'
+                  customs_places:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DictionaryItem'
+                  client_categories:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DictionaryItem'
 
   /dictionaries/{type}:
     get:
@@ -1971,7 +1995,14 @@ paths:
           required: true
           schema:
             type: string
-            enum: [vehicle_types, currencies, incoterms, cities, services]
+            enum: [vehicle_types, currencies, incoterms, cities, services, transportation_types, customs_places, client_categories]
+        - name: with_inactive
+          in: query
+          description: Включить неактивные элементы (только Admin)
+          schema:
+            type: integer
+            enum: [0, 1]
+            example: 1
       responses:
         '200':
           description: Справочник
@@ -1981,6 +2012,129 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/DictionaryItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Dictionaries
+      summary: Создать элемент справочника
+      description: Только Admin
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [vehicle_types, currencies, incoterms, cities, services, transportation_types, customs_places, client_categories]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - value
+              properties:
+                value:
+                  type: string
+                  example: "Новое значение"
+                description:
+                  type: string
+                  nullable: true
+                  example: null
+      responses:
+        '201':
+          description: Элемент создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictionaryItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /dictionaries/{type}/{id}:
+    patch:
+      tags:
+        - Dictionaries
+      summary: Обновить элемент справочника
+      description: Только Admin
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [vehicle_types, currencies, incoterms, cities, services, transportation_types, customs_places, client_categories]
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value:
+                  type: string
+                description:
+                  type: string
+                  nullable: true
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: Элемент обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictionaryItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+    delete:
+      tags:
+        - Dictionaries
+      summary: Деактивировать элемент справочника
+      description: |
+        Только Admin. Устанавливает `is_active = false`. Физически запись не удаляется.
+        Связанные данные (например, `category_id` у клиентов) сохраняются.
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [vehicle_types, currencies, incoterms, cities, services, transportation_types, customs_places, client_categories]
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Деактивировано
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   # ===== FILES =====
   /files/upload:
@@ -2429,6 +2583,10 @@ components:
           nullable: true
         status:
           $ref: '#/components/schemas/ClientStatus'
+        category_id:
+          type: integer
+          nullable: true
+          description: ID категории из справочника client_categories
         sales_manager_id:
           type: integer
           nullable: true
@@ -2482,6 +2640,11 @@ components:
             comment:
               type: string
               nullable: true
+            category:
+              description: Категория клиента (объект из справочника, null если не задана)
+              nullable: true
+              allOf:
+                - $ref: '#/components/schemas/DictionaryItem'
             contacts:
               type: array
               items:
@@ -2537,6 +2700,10 @@ components:
         leading_manager_id:
           type: integer
           description: Ведущий менеджер (обязательно для status=Active)
+        category_id:
+          type: integer
+          nullable: true
+          description: ID из справочника client_categories
         comment:
           type: string
 
@@ -2581,6 +2748,10 @@ components:
             Sales не может изменить статус — поле игнорируется.
         leading_manager_id:
           type: integer
+        category_id:
+          type: integer
+          nullable: true
+          description: ID из справочника client_categories
         comment:
           type: string
 
