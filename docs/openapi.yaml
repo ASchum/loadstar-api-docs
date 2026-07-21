@@ -32,6 +32,15 @@ info:
 
     ## Changelog
 
+    **1.8.0** (2026-07-21): Унификация формата ошибок. Добавлены `error`+`details` в 422-ответы
+    `POST /requests/{id}/route`, `DELETE /requests/{id}/route/{stageId}`, `POST /requests/{id}/approve`
+    (кроме `missing_client_fields`), `POST /orders/{id}/sign`, `POST /orders/{id}/reopen`.
+    `missing_client_fields` перенесён из корня ответа в `details.missing_client_fields`
+    (`error: "Incomplete Lead Data"`) — приведён к формату `error-codes.md`. `POST/PATCH /dictionaries/{type}`
+    — исправлена битая ссылка на несуществующий компонент `UnprocessableEntity`, теперь `ValidationError`.
+    Добавлен отсутствовавший 422 для `PUT /requests/{id}/route/reorder`. Дополнены описания причин 422
+    у `approve()` (договор) и `destroyStage()` (статус Completed).
+
     **1.7.0** (2026-05-28): Блокировка редактирования маршрута для Sales/Ops при `is_route_negotiated = true`.
     Sales/Ops не могут добавлять, удалять и переставлять этапы после согласования маршрута.
     В `PATCH /requests/{id}/route/{stageId}` при согласованном маршруте Sales/Ops могут передавать
@@ -49,9 +58,14 @@ info:
 
     **1.5.2** (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода.
 
-  version: 1.7.0
-  x-updated: "2026-05-28"
+  version: 1.8.0
+  x-updated: "2026-07-21"
   x-changelog: |
+    1.8.0 (2026-07-21): Унификация формата ошибок — error+details в 422 у storeStage,
+      destroyStage, approve() (кроме missing_client_fields), sign, reopen. missing_client_fields
+      перенесён в details.missing_client_fields (error: Incomplete Lead Data). Исправлена битая
+      ссылка UnprocessableEntity в Dictionaries CRUD → ValidationError. Добавлен отсутствовавший
+      422 для PUT /route/reorder. Дополнены описания причин 422 у approve()/destroyStage().
     1.7.0 (2026-05-28): Блокировка редактирования маршрута Sales/Ops при
       is_route_negotiated=true. PATCH /route/{stageId} — только фактические даты,
       остальные поля → 422 с forbidden_fields. Logist/Admin/Supervisor без ограничений.
@@ -1160,8 +1174,9 @@ paths:
                 $ref: '#/components/schemas/Error'
         '422':
           description: |
-            - Нельзя удалить этап с фактическими датами
+            - Запрос в статусе Completed
             - Sales/Ops: маршрут уже согласован (`is_route_negotiated = true`)
+            - Нельзя удалить этап с фактическими датами
           content:
             application/json:
               schema:
@@ -1206,6 +1221,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '422':
+          description: |
+            - Запрос в статусе Completed
+            - Sales/Ops: маршрут уже согласован (`is_route_negotiated = true`)
+            - Один или несколько этапов уже имеют фактические даты
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /requests/{id}/approve:
     post:
@@ -1238,6 +1262,10 @@ paths:
             - Запрос не в статусе New/Negotiating
             - Нет этапов маршрута
             - Нет единиц транспорта
+            - Нет договора (добавляется через POST /requests/{id}/contracts)
+            - Клиент — Лид с незаполненными обязательными полями: `error: "Incomplete Lead Data"`,
+              `details.missing_client_fields` — массив имён незаполненных полей
+              (inn, bank_name, bank_account, correspondent_account, bik, leading_manager_id)
           content:
             application/json:
               schema:
@@ -2057,7 +2085,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          $ref: '#/components/responses/ValidationError'
 
   /dictionaries/{type}/{id}:
     patch:
@@ -2105,7 +2133,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          $ref: '#/components/responses/ValidationError'
 
     delete:
       tags:
