@@ -210,7 +210,7 @@
   "error": "Incomplete Lead Data",
   "message": "Нельзя одобрить запрос: перед конвертацией лида в клиента необходимо заполнить обязательные поля карточки клиента.",
   "details": {
-    "missing_client_fields": ["inn", "bank_name", "bank_account", "correspondent_account", "bik", "leading_manager_id"]
+    "missing_client_fields": ["inn", "bank_name", "bank_account", "correspondent_account", "bik", "target_volume", "leading_manager_id"]
   }
 }
 ```

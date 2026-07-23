@@ -1265,7 +1265,7 @@ paths:
             - Нет договора (добавляется через POST /requests/{id}/contracts)
             - Клиент — Лид с незаполненными обязательными полями: `error: "Incomplete Lead Data"`,
               `details.missing_client_fields` — массив имён незаполненных полей
-              (inn, bank_name, bank_account, correspondent_account, bik, leading_manager_id)
+              (inn, bank_name, bank_account, correspondent_account, bik, target_volume, leading_manager_id)
           content:
             application/json:
               schema:
