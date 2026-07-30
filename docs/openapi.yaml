@@ -32,6 +32,14 @@ info:
 
     ## Changelog
 
+    **1.11.0** (2026-07-30): Редактирование и удаление финансовых записей (Q11). Добавлены
+    `PATCH /orders/{id}/financial-records/{recordId}` (частичное обновление; `record_type` не
+    редактируется) и `DELETE /orders/{id}/financial-records/{recordId}` (soft-delete через
+    `deleted_at`, запись не уничтожается физически). RBAC — тот же `canAccess()`, что у POST
+    (без дополнительных ограничений по роли). Новые коды ошибок для `Completed`-заказа:
+    `Cannot Modify Financial Record` (PATCH), `Cannot Delete Financial Record` (DELETE) — в
+    новом унифицированном формате `{error, message, details}`. Не breaking — новые эндпоинты.
+
     **1.10.0** (2026-07-30): Контрагент в финансовых записях (Q10). Добавлено поле `contragent_id`
     (nullable, FK на `Contragent`) в `RequestFinancialRecord`/`RequestFinancialRecordCreate` — для
     `record_type = Expense` (получатель расхода). Как и у `RequestInvoice.contragent_id`, не
@@ -73,9 +81,13 @@ info:
 
     **1.5.2** (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода.
 
-  version: 1.10.0
+  version: 1.11.0
   x-updated: "2026-07-30"
   x-changelog: |
+    1.11.0 (2026-07-30): Редактирование/удаление финансовых записей (Q11) — PATCH и DELETE
+      /orders/{id}/financial-records/{recordId}. DELETE — soft-delete через deleted_at.
+      RBAC как у POST (canAccess(), без доп. ограничений). Новые error-коды: Cannot Modify
+      Financial Record, Cannot Delete Financial Record.
     1.10.0 (2026-07-30): Контрагент в финансовых записях (Q10) — contragent_id (nullable, FK)
       в RequestFinancialRecord для record_type=Expense. ContragentLite для вложенного contragent.
       Не breaking, поле опционально.
@@ -1881,6 +1893,106 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationError'
+
+  /orders/{id}/financial-records/{recordId}:
+    patch:
+      tags:
+        - Orders
+      summary: Изменить финансовую запись
+      description: |
+        Частичное обновление. `record_type` не редактируется через этот эндпоинт.
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому заказу
+        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Для заказов в статусе Completed операция запрещена
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - name: recordId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID финансовой записи
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contragent_id:
+                  type: integer
+                  nullable: true
+                description:
+                  type: string
+                amount:
+                  type: number
+                invoice_number:
+                  type: string
+                  nullable: true
+                payment_date:
+                  type: string
+                  format: date
+                  nullable: true
+                comment:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          description: Запись обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestFinancialRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: |
+            - Заказ в статусе Completed (error: "Cannot Modify Financial Record")
+            - Ошибка валидации полей
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Orders
+      summary: Удалить финансовую запись
+      description: |
+        Soft-delete через `deleted_at` — запись не уничтожается физически, только
+        скрывается из GET-списка.
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому заказу
+        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Для заказов в статусе Completed операция запрещена
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - name: recordId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID финансовой записи
+      responses:
+        '204':
+          description: Запись удалена (soft-delete)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Заказ в статусе Completed (error: "Cannot Delete Financial Record")
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /orders/{id}/complete:
     post:
