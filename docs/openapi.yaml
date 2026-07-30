@@ -32,6 +32,15 @@ info:
 
     ## Changelog
 
+    **1.11.1** (2026-07-30): Исправление документации `PATCH /requests/{id}/route/{stageId}`
+    (только описание, API не менялся). Тело запроса не обновлялось с релиза 1.9.0 (Q12) —
+    отсутствовали 4 customs-поля (`planned_customs_arrival_date` и др.) и почти все структурные
+    поля (`contragent_id`, `departure_location`, `base_cost`, `customs_cost` и т.д. — код принимает
+    их все, задокументирован был только `location`). Также убрано несуществующее поле `notes`
+    (в модели `RouteStage` такой колонки нет). Уточнено описание правила «после согласования
+    доступны только фактические даты» — теперь корректно описано как зависящее от `stage_type`,
+    а не захардкожен список из 3 полей одного типа (delivery).
+
     **1.11.0** (2026-07-30): Редактирование и удаление финансовых записей (Q11). Добавлены
     `PATCH /orders/{id}/financial-records/{recordId}` (частичное обновление; `record_type` не
     редактируется) и `DELETE /orders/{id}/financial-records/{recordId}` (soft-delete через
@@ -81,9 +90,13 @@ info:
 
     **1.5.2** (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода.
 
-  version: 1.11.0
+  version: 1.11.1
   x-updated: "2026-07-30"
   x-changelog: |
+    1.11.1 (2026-07-30): Исправление документации PATCH /requests/{id}/route/{stageId} —
+      не обновлялась с 1.9.0 (Q12). Добавлены недостающие поля (customs-даты + почти все
+      структурные), убрано несуществующее notes, уточнено правило forbidden_fields.
+      API не менялся.
     1.11.0 (2026-07-30): Редактирование/удаление финансовых записей (Q11) — PATCH и DELETE
       /orders/{id}/financial-records/{recordId}. DELETE — soft-delete через deleted_at.
       RBAC как у POST (canAccess(), без доп. ограничений). Новые error-коды: Cannot Modify
@@ -1116,7 +1129,9 @@ paths:
         - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
         - Для запросов в статусе Completed операция запрещена
         - Sales, Ops при `is_route_negotiated = true`: допустимы только фактические даты
-          (`actual_departure_date`, `actual_arrival_date`, `actual_date`).
+          своего типа этапа (например, для delivery — `actual_departure_date`,
+          `actual_arrival_date`; для customs — `actual_customs_arrival_date`,
+          `actual_customs_clearance_date`; для transshipment/warehouse — `actual_date`).
           Передача других полей вернёт 422 с перечнем запрещённых полей в `forbidden_fields`.
       parameters:
         - $ref: '#/components/parameters/IdParam'
@@ -1129,31 +1144,93 @@ paths:
         required: true
         content:
           application/json:
+            # Поля идентичны RouteStageCreate за вычетом stage_type/stage_order
+            # (не изменяются через этот эндпоинт) — при добавлении нового поля
+            # этапа обновить схему в обоих местах.
             schema:
               type: object
               properties:
+                contragent_id:
+                  type: integer
+                departure_location:
+                  type: string
+                  description: Точка отправления (используется для stage_type = delivery)
+                destination_location:
+                  type: string
+                  description: Точка назначения (используется для stage_type = delivery)
+                service_type:
+                  type: string
+                base_cost:
+                  type: number
+                base_currency:
+                  type: string
+                conversion_percent:
+                  type: number
+                client_rate:
+                  type: number
+                client_rate_currency:
+                  type: string
+                customs_cost:
+                  type: number
+                  description: Стоимость таможенного оформления (используется для stage_type = customs)
+                customs_currency:
+                  type: string
+                  description: Валюта таможенных расходов (USD/CNY/EUR/RUB, используется для stage_type = customs)
+                customs_conversion_percent:
+                  type: number
+                  description: Процент конверсии для таможенных расходов (используется для stage_type = customs)
+                customs_declaration_numbers:
+                  type: array
+                  items:
+                    type: string
+                  description: Массив номеров ДТ (используется для stage_type = customs)
                 location:
                   type: string
+                  description: Локация (используется для stage_type = transshipment, customs, warehouse)
                 planned_departure_date:
                   type: string
                   format: date
+                  description: Плановая дата отправления (используется для stage_type = delivery)
                 planned_arrival_date:
                   type: string
                   format: date
-                planned_date:
-                  type: string
-                  format: date
+                  description: Плановая дата прибытия (используется для stage_type = delivery)
                 actual_departure_date:
                   type: string
                   format: date
+                  description: Фактическая дата отправления (используется для stage_type = delivery)
                 actual_arrival_date:
                   type: string
                   format: date
+                  description: Фактическая дата прибытия (используется для stage_type = delivery)
+                planned_date:
+                  type: string
+                  format: date
+                  description: >-
+                    Плановая дата (используется для stage_type = transshipment, warehouse).
+                    Для customs НЕ используется.
                 actual_date:
                   type: string
                   format: date
-                notes:
+                  description: >-
+                    Фактическая дата (используется для stage_type = transshipment, warehouse).
+                    Для customs НЕ используется.
+                planned_customs_arrival_date:
                   type: string
+                  format: date
+                  description: Плановая дата прибытия на таможню (используется для stage_type = customs)
+                planned_customs_clearance_date:
+                  type: string
+                  format: date
+                  description: Плановая дата прохождения таможни (используется для stage_type = customs)
+                actual_customs_arrival_date:
+                  type: string
+                  format: date
+                  description: Фактическая дата прибытия на таможню (используется для stage_type = customs)
+                actual_customs_clearance_date:
+                  type: string
+                  format: date
+                  description: Фактическая дата прохождения таможни (используется для stage_type = customs)
       responses:
         '200':
           description: Этап обновлён
@@ -1988,7 +2065,8 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
-          description: Заказ в статусе Completed (error: "Cannot Delete Financial Record")
+          description: >-
+            Заказ в статусе Completed (error: "Cannot Delete Financial Record")
           content:
             application/json:
               schema:
