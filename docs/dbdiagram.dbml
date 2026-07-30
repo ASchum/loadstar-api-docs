@@ -283,15 +283,21 @@ Table route_stage {
   conversion_percent decimal(5,2) [default: 0]
   client_rate decimal(15,2) [note: 'Ставка клиенту']
   client_rate_currency varchar(3) [note: 'USD/CNY/EUR/RUB']
-  planned_departure_date date
-  planned_arrival_date date
-  actual_departure_date date
-  actual_arrival_date date
+  // Даты — generic вехи, общие для всех типов этапов.
+  // Смысл зависит от stage_type (см. RouteStage::DATE_MAP в бэкенде):
+  //   delivery      → start = отправление,         end = прибытие
+  //   customs       → start = прибытие на таможню, end = прохождение таможни
+  //   transshipment → start = перегрузка,          end = NULL (одна веха)
+  //   warehouse     → start = прибытие на склад,   end = NULL (одна веха)
+  // API отдаёт/принимает семантические имена (planned_departure_date,
+  // actual_customs_clearance_date и т.д.), не эти колонки.
+  planned_start_date date
+  actual_start_date date
+  planned_end_date date
+  actual_end_date date
 
   // Поля для transshipment/warehouse
   location varchar(100)
-  planned_date date
-  actual_date date
 
   // Поля для customs
   customs_cost decimal(15,2)
@@ -307,7 +313,7 @@ Table route_stage {
     (request_id, stage_order) [unique]
     (stage_type)
   }
-  Note: 'Универсальная таблица этапов маршрута: доставка А→Б, перегрузка, таможня, склад.'
+  Note: 'Универсальная таблица этапов маршрута: доставка А→Б, перегрузка, таможня, склад. Даты хранятся как generic-вехи (start/end), смысл определяется stage_type. CHECK-констрейнт (MySQL): у transshipment/warehouse end-даты всегда NULL.'
 }
 
 // =====================================================

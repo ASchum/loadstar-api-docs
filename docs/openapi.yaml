@@ -32,6 +32,15 @@ info:
 
     ## Changelog
 
+    **1.9.0** (2026-07-30): Раздельные даты таможни (Q12). Для `stage_type = customs` добавлены
+    4 поля: `planned_customs_arrival_date`, `planned_customs_clearance_date`,
+    `actual_customs_arrival_date`, `actual_customs_clearance_date` — прибытие на таможню и
+    прохождение таможни теперь разные события (по ТЗ §3.4/§3.5). **Breaking для customs:**
+    `planned_date`/`actual_date` для этого типа больше не используются (ранее фронт хранил в
+    `actual_date` плановую дату прохождения). Для `delivery`, `transshipment`, `warehouse`
+    контракт не изменился. Внутреннее хранение переведено на generic-вехи (см. `RouteStage::DATE_MAP`),
+    на контракт API это не влияет.
+
     **1.8.0** (2026-07-21): Унификация формата ошибок. Добавлены `error`+`details` в 422-ответы
     `POST /requests/{id}/route`, `DELETE /requests/{id}/route/{stageId}`, `POST /requests/{id}/approve`
     (кроме `missing_client_fields`), `POST /orders/{id}/sign`, `POST /orders/{id}/reopen`.
@@ -58,7 +67,7 @@ info:
 
     **1.5.2** (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода.
 
-  version: 1.8.0
+  version: 1.9.0
   x-updated: "2026-07-21"
   x-changelog: |
     1.8.0 (2026-07-21): Унификация формата ошибок — error+details в 422 у storeStage,
@@ -3324,12 +3333,38 @@ components:
           type: string
           format: date
           nullable: true
-          description: Плановая дата (используется для stage_type = transshipment, customs, warehouse)
+          description: >-
+            Плановая дата (используется для stage_type = transshipment, warehouse).
+            Для customs НЕ используется — см. planned_customs_arrival_date /
+            planned_customs_clearance_date.
         actual_date:
           type: string
           format: date
           nullable: true
-          description: Фактическая дата (используется для stage_type = transshipment, customs, warehouse)
+          description: >-
+            Фактическая дата (используется для stage_type = transshipment, warehouse).
+            Для customs НЕ используется — см. actual_customs_arrival_date /
+            actual_customs_clearance_date.
+        planned_customs_arrival_date:
+          type: string
+          format: date
+          nullable: true
+          description: Плановая дата прибытия на таможню (используется для stage_type = customs)
+        planned_customs_clearance_date:
+          type: string
+          format: date
+          nullable: true
+          description: Плановая дата прохождения таможни (используется для stage_type = customs)
+        actual_customs_arrival_date:
+          type: string
+          format: date
+          nullable: true
+          description: Фактическая дата прибытия на таможню (используется для stage_type = customs)
+        actual_customs_clearance_date:
+          type: string
+          format: date
+          nullable: true
+          description: Фактическая дата прохождения таможни (используется для stage_type = customs)
 
     RouteStageCreate:
       type: object
@@ -3384,13 +3419,45 @@ components:
           type: string
           format: date
           description: Плановая дата прибытия (используется для stage_type = delivery)
+        actual_departure_date:
+          type: string
+          format: date
+          description: Фактическая дата отправления (используется для stage_type = delivery)
+        actual_arrival_date:
+          type: string
+          format: date
+          description: Фактическая дата прибытия (используется для stage_type = delivery)
         location:
           type: string
           description: Локация (используется для stage_type = transshipment, customs, warehouse)
         planned_date:
           type: string
           format: date
-          description: Плановая дата (используется для stage_type = transshipment, customs, warehouse)
+          description: >-
+            Плановая дата (используется для stage_type = transshipment, warehouse).
+            Для customs НЕ используется.
+        actual_date:
+          type: string
+          format: date
+          description: >-
+            Фактическая дата (используется для stage_type = transshipment, warehouse).
+            Для customs НЕ используется.
+        planned_customs_arrival_date:
+          type: string
+          format: date
+          description: Плановая дата прибытия на таможню (используется для stage_type = customs)
+        planned_customs_clearance_date:
+          type: string
+          format: date
+          description: Плановая дата прохождения таможни (используется для stage_type = customs)
+        actual_customs_arrival_date:
+          type: string
+          format: date
+          description: Фактическая дата прибытия на таможню (используется для stage_type = customs)
+        actual_customs_clearance_date:
+          type: string
+          format: date
+          description: Фактическая дата прохождения таможни (используется для stage_type = customs)
 
     RouteReorder:
       type: object

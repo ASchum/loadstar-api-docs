@@ -833,10 +833,17 @@ WHERE id = ? AND updated_at = ?;
 - `message_date` - дата и время сообщения в чате (UTC)
 
 **Бизнес-даты без времени (только день):**
-- `planned_departure_date` - плановая дата отправления (DATE, без timezone)
-- `actual_arrival_date` - фактическая дата прибытия (DATE, без timezone)
+- `planned_departure_date` - плановая дата отправления этапа маршрута, поле API (DATE, без timezone)
+- `actual_customs_clearance_date` - фактическая дата прохождения таможни, поле API (DATE, без timezone)
 - `payment_date` - дата оплаты (DATE, без timezone)
-- `start_date`, `end_date` - даты договоров (DATE, без timezone)
+- `start_date`, `end_date` - даты договоров, таблица `request_contract` (DATE, без timezone)
+
+> **Примечание по маршрутным датам.** В таблице `route_stage` даты физически хранятся как
+> generic-вехи — `planned_start_date`, `actual_start_date`, `planned_end_date`, `actual_end_date`.
+> Смысл вехи определяется `stage_type`: у доставки start/end = отправление/прибытие, у таможни =
+> прибытие на таможню/прохождение таможни, у перегрузки и склада заполняется только start.
+> API при этом отдаёт и принимает семантические имена (`planned_departure_date`,
+> `actual_customs_clearance_date` и т.п.) — имена колонок наружу не выходят.
 
 **Формат передачи данных:**
 - В API используется ISO 8601 с суффиксом Z: `"2026-02-17T10:30:00Z"`
