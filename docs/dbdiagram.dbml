@@ -383,6 +383,7 @@ Table request_financial_record {
   id int [pk, increment]
   request_id int [not null, ref: > request.id, note: 'Заполняется когда request.status >= Approved']
   record_type varchar(20) [not null, note: 'Income | Expense']
+  contragent_id int [ref: > contragent.id, note: 'Только для record_type = Expense']
   description varchar(255) [not null, note: 'Описание операции']
   amount decimal(15,2) [not null, note: 'Сумма']
   invoice_number varchar(50) [note: 'Номер счета (при оплате)']
@@ -394,6 +395,7 @@ Table request_financial_record {
   indexes {
     (request_id)
     (record_type)
+    (contragent_id)
   }
   Note: 'Фактические доходы и расходы по заказу (привязаны к request со status >= Approved)'
 }

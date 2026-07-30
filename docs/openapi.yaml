@@ -32,6 +32,12 @@ info:
 
     ## Changelog
 
+    **1.10.0** (2026-07-30): Контрагент в финансовых записях (Q10). Добавлено поле `contragent_id`
+    (nullable, FK на `Contragent`) в `RequestFinancialRecord`/`RequestFinancialRecordCreate` — для
+    `record_type = Expense` (получатель расхода). Как и у `RequestInvoice.contragent_id`, не
+    enforced на уровне валидации по типу записи. Добавлена схема `ContragentLite` для вложенного
+    `contragent` (`{id, name}`). Не breaking — поле опционально.
+
     **1.9.0** (2026-07-30): Раздельные даты таможни (Q12). Для `stage_type = customs` добавлены
     4 поля: `planned_customs_arrival_date`, `planned_customs_clearance_date`,
     `actual_customs_arrival_date`, `actual_customs_clearance_date` — прибытие на таможню и
@@ -67,9 +73,15 @@ info:
 
     **1.5.2** (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода.
 
-  version: 1.9.0
-  x-updated: "2026-07-21"
+  version: 1.10.0
+  x-updated: "2026-07-30"
   x-changelog: |
+    1.10.0 (2026-07-30): Контрагент в финансовых записях (Q10) — contragent_id (nullable, FK)
+      в RequestFinancialRecord для record_type=Expense. ContragentLite для вложенного contragent.
+      Не breaking, поле опционально.
+    1.9.0 (2026-07-30): Раздельные даты таможни (Q12) — 4 новых поля для stage_type=customs
+      (planned/actual_customs_arrival/clearance_date). Breaking для customs: planned_date/
+      actual_date для этого типа больше не используются.
     1.8.0 (2026-07-21): Унификация формата ошибок — error+details в 422 у storeStage,
       destroyStage, approve() (кроме missing_client_fields), sign, reopen. missing_client_fields
       перенесён в details.missing_client_fields (error: Incomplete Lead Data). Исправлена битая
@@ -2511,6 +2523,15 @@ components:
         - Logist
         - Supervisor
 
+    ContragentLite:
+      type: object
+      description: Компактный объект контрагента — используется во вложенных ответах (например, RequestFinancialRecord.contragent)
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
     UserLite:
       type: object
       description: Компактный объект пользователя — возвращается при login/refresh/me
@@ -3659,6 +3680,12 @@ components:
         record_type:
           type: string
           enum: [Income, Expense]
+        contragent_id:
+          type: integer
+          nullable: true
+          description: ID контрагента (используется для record_type = Expense)
+        contragent:
+          $ref: '#/components/schemas/ContragentLite'
         description:
           type: string
         amount:
@@ -3691,6 +3718,9 @@ components:
         record_type:
           type: string
           enum: [Income, Expense]
+        contragent_id:
+          type: integer
+          description: ID контрагента (указывается для record_type = Expense)
         description:
           type: string
         amount:
