@@ -419,3 +419,21 @@ Table dictionary {
   }
   Note: 'Справочники и словари системы'
 }
+
+// =====================================================
+// 18. Запросы на изменение маршрута
+// =====================================================
+Table route_change_request {
+  id int [pk, increment]
+  request_id int [not null, ref: > request.id, note: 'Заказ (status = Approved)']
+  requested_by_id int [not null, ref: > user.id, note: 'Кто запросил (Ops)']
+  requested_at timestamp [not null]
+  resolved_by_id int [ref: > user.id, note: 'Кто утвердил (Supervisor), NULL пока не утверждён']
+  resolved_at timestamp [note: 'NULL = запрос ещё открыт']
+
+  indexes {
+    (request_id)
+    (resolved_at)
+  }
+  Note: 'История запросов Ops на изменение маршрута (ТЗ §3.5, §5.3.3). Закрывается автоматически при POST /orders/{id}/reopen.'
+}

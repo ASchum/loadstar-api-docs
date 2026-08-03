@@ -32,6 +32,19 @@ info:
 
     ## Changelog
 
+    **1.12.0** (2026-07-31): Поток «изменить маршрут» через Supervisor (Q13). Добавлен
+    `POST /orders/{id}/request-route-change` — Ops запрашивает изменение маршрута утверждённого
+    заказа (RBAC: Ops только свои, Admin/Supervisor любые; Sales/Logist — 403). Идемпотентно:
+    повторный вызов при открытом запросе возвращает 200 вместо 201, дубль не создаётся.
+    Утверждение — через существующий `POST /orders/{id}/reopen`, который теперь дополнительно
+    закрывает открытый запрос (отдельного эндпоинта утверждения нет). Новая схема
+    `RouteChangeRequest` и поле `pending_route_change_request` в схеме `Request` (видно в
+    `GET /orders` и `GET /orders/{id}`; для не-заказов всегда NULL). В
+    `PATCH /requests/{id}/route/{stageId}` добавлена блокировка правки **пройденных** этапов для
+    Sales/Ops — новый код 422 `Stage Already Passed`; плановые даты пройденного этапа тоже
+    заблокированы. Не breaking — новый эндпоинт и аддитивное поле; поведение `reopen` для
+    существующих клиентов не изменилось.
+
     **1.11.1** (2026-07-30): Исправление документации `PATCH /requests/{id}/route/{stageId}`
     (только описание, API не менялся). Тело запроса не обновлялось с релиза 1.9.0 (Q12) —
     отсутствовали 4 customs-поля (`planned_customs_arrival_date` и др.) и почти все структурные
@@ -90,9 +103,14 @@ info:
 
     **1.5.2** (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода.
 
-  version: 1.11.1
-  x-updated: "2026-07-30"
+  version: 1.12.0
+  x-updated: "2026-07-31"
   x-changelog: |
+    1.12.0 (2026-07-31): Поток «изменить маршрут» через Supervisor (Q13) — новый
+      POST /orders/{id}/request-route-change (Ops, идемпотентный), reopen() дополнительно
+      закрывает открытый запрос. Схема RouteChangeRequest + поле pending_route_change_request.
+      Новый код 422 Stage Already Passed в PATCH /route/{stageId} — блокировка правки
+      пройденных этапов для Sales/Ops (включая плановые даты).
     1.11.1 (2026-07-30): Исправление документации PATCH /requests/{id}/route/{stageId} —
       не обновлялась с 1.9.0 (Q12). Добавлены недостающие поля (customs-даты + почти все
       структурные), убрано несуществующее notes, уточнено правило forbidden_fields.
@@ -1133,6 +1151,12 @@ paths:
           `actual_arrival_date`; для customs — `actual_customs_arrival_date`,
           `actual_customs_clearance_date`; для transshipment/warehouse — `actual_date`).
           Передача других полей вернёт 422 с перечнем запрещённых полей в `forbidden_fields`.
+        - Sales, Ops по **пройденному этапу** (заполнена хотя бы одна фактическая дата):
+          допустимы только фактические даты этого этапа — плановые даты и структурные поля
+          заблокированы (нельзя задним числом подвинуть план под факт и скрыть опоздание).
+          Действует независимо от `is_route_negotiated`, в том числе после `reopen`.
+          Ошибка — 422 `Stage Already Passed` с `forbidden_fields`.
+          Admin/Supervisor/Logist не ограничены.
       parameters:
         - $ref: '#/components/parameters/IdParam'
         - name: stageId
@@ -2163,6 +2187,55 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           description: Заказ не в статусе Approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /orders/{id}/request-route-change:
+    post:
+      tags:
+        - Orders
+      summary: Запросить изменение маршрута
+      description: |
+        Ops запрашивает у Supervisor разрешение изменить маршрут утверждённого заказа
+        (ТЗ §3.5, §5.3.3). Supervisor утверждает запрос через `POST /orders/{id}/reopen` —
+        тот же вызов автоматически закрывает запрос (`resolved_by_id`/`resolved_at`).
+        Отдельного эндпоинта для утверждения нет.
+
+        Идемпотентно: если по заказу уже есть открытый запрос, повторный вызов не создаёт
+        дубль и возвращает 200 вместо 201.
+
+        Текущий открытый запрос виден в поле `pending_route_change_request`
+        (в `GET /orders` и `GET /orders/{id}`).
+
+        Правила доступа:
+        - Admin, Supervisor: доступ к любому заказу
+        - Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Sales, Logist: доступ запрещён
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '201':
+          description: Запрос создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetail'
+        '200':
+          description: Запрос уже был открыт — возвращено текущее состояние без создания дубля
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Заказ не в статусе Approved (error - "Invalid Order Status")
           content:
             application/json:
               schema:
@@ -3255,9 +3328,45 @@ components:
           format: date-time
           nullable: true
           description: 'Дата/время согласования заявки для запуска в исполнение (NULL=не согласована, заполненное значение=готова к исполнению)'
+        pending_route_change_request:
+          allOf:
+            - $ref: '#/components/schemas/RouteChangeRequest'
+          nullable: true
+          description: |
+            Открытый (ещё не утверждённый) запрос Ops на изменение маршрута, либо NULL.
+            Закрывается при `POST /orders/{id}/reopen`.
+            Всегда NULL для запросов (New/Negotiating/Rejected) — такие запросы бывают только у заказов.
         created_at:
           type: string
           format: date-time
+
+    RouteChangeRequest:
+      type: object
+      description: Запрос Ops на изменение маршрута утверждённого заказа (ТЗ §3.5, §5.3.3)
+      properties:
+        id:
+          type: integer
+        request_id:
+          type: integer
+        requested_by_id:
+          type: integer
+          description: Кто запросил (Ops)
+        requested_by:
+          allOf:
+            - $ref: '#/components/schemas/UserLite'
+          nullable: true
+        requested_at:
+          type: string
+          format: date-time
+        resolved_by_id:
+          type: integer
+          nullable: true
+          description: Кто утвердил (Supervisor). NULL — запрос ещё открыт
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: NULL — запрос ещё открыт
 
     RequestDetail:
       allOf:
