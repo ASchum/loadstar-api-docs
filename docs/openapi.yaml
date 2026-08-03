@@ -32,6 +32,17 @@ info:
 
     ## Changelog
 
+    **1.13.0** (2026-08-03): Даты чужого типа этапа больше не теряются молча. В
+    `POST /requests/{id}/route` и `PATCH /requests/{id}/route/{stageId}` добавлен код 422
+    `Invalid Date Field For Stage Type` с `details.invalid_fields` и `details.allowed_fields`.
+    Раньше валидация принимала любое имя даты (правила строятся объединением по всем
+    `stage_type`), а раскладка по колонкам шла строго по типу этапа — поэтому, например,
+    `actual_date` для customs проходил с 200, но не сохранялся. Проверка идёт **до**
+    `Route Already Negotiated` и `Stage Already Passed`, иначе чужое поле попадало в их
+    `forbidden_fields` с неверным объяснением причины. Формально меняет ответ там, где
+    раньше был 200 — но 200 означал потерю данных, поэтому корректных клиентов это не
+    ломает. Актуально для фронта, ещё не перешедшего на customs-поля из 1.9.0.
+
     **1.12.0** (2026-07-31): Поток «изменить маршрут» через Supervisor (Q13). Добавлен
     `POST /orders/{id}/request-route-change` — Ops запрашивает изменение маршрута утверждённого
     заказа (RBAC: Ops только свои, Admin/Supervisor любые; Sales/Logist — 403). Идемпотентно:
@@ -103,9 +114,14 @@ info:
 
     **1.5.2** (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода.
 
-  version: 1.12.0
-  x-updated: "2026-07-31"
+  version: 1.13.0
+  x-updated: "2026-08-03"
   x-changelog: |
+    1.13.0 (2026-08-03): Новый код 422 Invalid Date Field For Stage Type в POST/PATCH
+      этапов маршрута — дата, не принадлежащая stage_type (например actual_date для
+      customs), раньше проходила валидацию и молча терялась с ответом 200. В details
+      возвращаются invalid_fields и allowed_fields. Проверка выполняется до
+      Route Already Negotiated и Stage Already Passed.
     1.12.0 (2026-07-31): Поток «изменить маршрут» через Supervisor (Q13) — новый
       POST /orders/{id}/request-route-change (Ops, идемпотентный), reopen() дополнительно
       закрывает открытый запрос. Схема RouteChangeRequest + поле pending_route_change_request.
@@ -1104,6 +1120,10 @@ paths:
         - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
         - Для запросов в статусе Completed операция запрещена
         - Sales, Ops: запрещено если `is_route_negotiated = true` — маршрут уже согласован
+        - Поля дат должны соответствовать переданному `stage_type`. Дата чужого типа
+          (например `actual_date` при `stage_type = customs`) вернёт 422
+          `Invalid Date Field For Stage Type` с `details.invalid_fields` и
+          `details.allowed_fields`. Этап при этом не создаётся.
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -1157,6 +1177,13 @@ paths:
           Действует независимо от `is_route_negotiated`, в том числе после `reopen`.
           Ошибка — 422 `Stage Already Passed` с `forbidden_fields`.
           Admin/Supervisor/Logist не ограничены.
+        - Поля дат **чужого типа этапа** отклоняются с 422 `Invalid Date Field For Stage Type`
+          (`details.invalid_fields` — что прислали, `details.allowed_fields` — что допустимо
+          для этого `stage_type`). Например, `actual_date` для customs: имена дат общие
+          в валидации, но раскладываются по `stage_type`, поэтому раньше такое поле
+          принималось с 200 и молча терялось. Проверка выполняется **до** проверок
+          `Route Already Negotiated` и `Stage Already Passed`, чтобы причина в ответе
+          была верной.
       parameters:
         - $ref: '#/components/parameters/IdParam'
         - name: stageId
