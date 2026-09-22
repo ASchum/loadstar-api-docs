@@ -154,6 +154,7 @@ Table request {
   initiator_id int [not null, ref: > user.id, note: 'Сотрудник-инициатор']
   client_id int [not null, ref: > client.id, note: 'Ссылка на клиента/лида']
   logist_id int [null, ref: > user.id, note: 'Назначенный логист (NULL = не назначен)']
+  ops_manager_id int [null, ref: > user.id, note: 'Q16: Ops, которому передан заказ на сопровождение. Проставляется при approve; NULL у запросов']
 
   // Данные запроса
   incoterms char(3) [note: 'EXW, FCA, FOB, CIF, CIP, CPT, DAP']
@@ -186,6 +187,7 @@ Table request {
     (initiator_id)
     (client_id)
     (logist_id)
+    (ops_manager_id)
     (status)
     (is_route_negotiated)
     (signet_at)
@@ -215,19 +217,31 @@ Table request_unit {
 // =====================================================
 // 9. Файлы запроса/заказа
 // =====================================================
+Table file {
+  id int [pk, increment]
+  original_name varchar(255) [not null, note: 'Исходное имя — под ним файл отдаётся при скачивании']
+  path varchar(500) [not null, unique, note: 'Путь внутри диска local; имя на диске случайное']
+  size int
+  uploaded_by_id int [ref: > user.id]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Q14: реестр загруженных файлов. Одна запись = один физический файл. Файлы запроса, вложения чата и документы заказа ссылаются на неё через file_id; пока ссылок нет — это незавершённая двухшаговая загрузка, доступная только загрузчику'
+}
+
 Table request_file {
   id int [pk, increment]
   request_id int [not null, ref: > request.id]
-  file_name varchar(255) [not null]
-  file_path varchar(500) [not null]
-  file_size int
+  file_id int [ref: > file.id, note: 'Q14: ссылка на реестр']
+  file_name varchar(255) [note: 'Устаревшая копия из file — снимается миграцией, TD-012']
+  file_path varchar(500) [note: 'Устаревшая копия из file — TD-012']
+  file_size int [note: 'Устаревшая копия из file — TD-012']
   uploaded_by_id int [not null, ref: > user.id]
   created_at timestamp [default: `CURRENT_TIMESTAMP`]
 
   indexes {
     (request_id)
   }
-  Note: 'Файлы, прикрепленные к запросам/заказам'
+  Note: 'Связь запроса с файлом реестра — вкладка «Данные запроса»'
 }
 
 // =====================================================
@@ -253,15 +267,16 @@ Table route_negotiation_chat {
 Table route_negotiation_file {
   id int [pk, increment]
   negotiation_id int [not null, ref: > route_negotiation_chat.id]
-  file_name varchar(255) [not null]
-  file_path varchar(500) [not null]
-  file_size int
+  file_id int [ref: > file.id, note: 'Q14: ссылка на реестр']
+  file_name varchar(255) [note: 'Устаревшая копия из file — TD-012']
+  file_path varchar(500) [note: 'Устаревшая копия из file — TD-012']
+  file_size int [note: 'Устаревшая копия из file — TD-012']
   created_at timestamp [default: `CURRENT_TIMESTAMP`]
 
   indexes {
     (negotiation_id)
   }
-  Note: 'Файлы, прикрепленные к сообщениям согласования маршрута'
+  Note: 'Связь сообщения согласования с файлом реестра'
 }
 
 // =====================================================
@@ -341,10 +356,11 @@ Table request_contract {
 Table request_document {
   id int [pk, increment]
   request_id int [not null, ref: > request.id, note: 'Заполняется когда request.status >= Approved']
+  file_id int [ref: > file.id, note: 'Q14: ссылка на реестр']
   document_description varchar(255)
-  file_name varchar(255) [not null]
-  file_path varchar(500) [not null]
-  file_size int
+  file_name varchar(255) [note: 'Устаревшая копия из file — TD-012']
+  file_path varchar(500) [note: 'Устаревшая копия из file — TD-012']
+  file_size int [note: 'Устаревшая копия из file — TD-012']
   uploaded_by_id int [not null, ref: > user.id]
   created_at timestamp [default: `CURRENT_TIMESTAMP`]
 

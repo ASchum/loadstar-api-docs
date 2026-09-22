@@ -32,6 +32,59 @@ info:
 
     ## Changelog
 
+    **1.15.0** (2026-09-22): Передача заказа от Sales к Ops, документы заказа, смена клиента
+    (Q15–Q17).
+
+    **Breaking для фронта:**
+    - `POST /requests/{id}/approve` требует тело `{ops_manager_id}` — оператор, которому
+      передаётся заказ на сопровождение (активный пользователь с ролью Ops). Без него — 422.
+      Список для выбора — новый `GET /users/ops`;
+    - Sales после одобрения теряет доступ к заказу: `GET /orders` возвращает ему пустой список,
+      `GET /orders/{id}` и все вложенные эндпоинты — 403. Свою запись он по-прежнему видит в
+      `GET /requests` и `GET /requests/{id}`. После одобрения Sales получает 403 на всём, что
+      меняет запись, в том числе под `/requests`: правка, маршрут, отклонение, файлы, договоры,
+      сообщения в чат. Документы заказа он не скачивает и через `GET /files/{id}/download`
+      (кроме файлов, загруженных им самим). Переписку читать может;
+    - `GET/POST/DELETE /orders/{id}/documents` отвечают 404, если запись ещё не заказ
+      (не Approved/Completed) — как `GET /orders/{id}`.
+
+    **Аддитивно:**
+    - поле `ops_manager_id` / `ops_manager` в схеме `Request` (у заказов, NULL у запросов);
+    - Ops видит заказы, переданные ему, а не только созданные им, и работает с их маршрутом
+      и чатом;
+    - `GET /users/ops` — активные операторы, доступен всем авторизованным;
+    - `GET /orders/{id}/documents/{documentId}/download`;
+    - `PATCH /requests/{id}` принимает `client_id` (раньше поле молча отбрасывалось с ответом 200):
+      только Ops/Admin/Supervisor, только New/Negotiating, без договора, клиент Lead или Active;
+    - Logist по назначенному заказу только читает: документы, финансовые записи, счета и договоры
+      ему видны, но загрузка, создание, правка и удаление — 403. Раньше он мог, например,
+      удалить договор или обнулить сумму расхода.
+
+    **1.14.0** (2026-09-18): Единый реестр файлов (Q14). Загруженный файл описывается одной
+    записью (схема `File`), а файлы запроса, вложения чата и документы заказа стали ссылками
+    на неё. Раньше путь к файлу копировался в три таблицы, из-за чего вложения чата были
+    недоступны для скачивания: чат отдавал `files[].id` из своей таблицы, а
+    `GET /files/{id}/download` искал этот id среди файлов запроса — 403 либо, при совпадении
+    номеров, чужой файл с кодом 200.
+
+    Что изменилось в контракте:
+    - `files[].id` в сообщениях чата и `id` в списке файлов запроса — теперь идентификатор
+      файла в реестре; его принимают `GET /files/{id}/download` и
+      `DELETE /requests/{id}/files/{fileId}`. Тот же id возвращает `POST /files/upload`;
+    - у документов заказа `id` остался идентификатором документа (по нему работает удаление),
+      добавлено поле `file_id` — для скачивания файла;
+    - `file_path` убран из всех ответов: внутренний путь на диске наружу не отдаётся;
+    - прикрепление файла (к запросу, в чат, документом) принимает только свой файл либо файл,
+      уже используемый в этом же запросе → иначе 403. Раньше принимался любой существующий
+      `file_id`, то есть чужую загрузку можно было прикрепить к своему запросу и скачать;
+    - `DELETE /requests/{id}/files/{fileId}` удаляет файл с диска, только если на него больше
+      никто не ссылается; вложение чата и документ заказа удерживают файл;
+    - файл сохраняется на диске под случайным именем: раньше повторная загрузка одноимённого
+      файла затирала предыдущий, и обе записи начинали указывать на последний.
+
+    Не breaking для текущего фронта: значения `id` приходят из ответов API и нигде не
+    сохраняются между сессиями.
+
     **1.13.0** (2026-08-03): Даты чужого типа этапа больше не теряются молча. В
     `POST /requests/{id}/route` и `PATCH /requests/{id}/route/{stageId}` добавлен код 422
     `Invalid Date Field For Stage Type` с `details.invalid_fields` и `details.allowed_fields`.
@@ -114,9 +167,17 @@ info:
 
     **1.5.2** (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода.
 
-  version: 1.13.0
-  x-updated: "2026-08-03"
+  version: 1.15.0
+  x-updated: "2026-09-22"
   x-changelog: |
+    1.15.0 (2026-09-22): Q15–Q17 — `approve` требует `ops_manager_id`, Sales теряет доступ
+      к заказу после одобрения, `GET /users/ops`, скачивание документа заказа, документы
+      только у заказов, логист — только чтение документов, `client_id` в `PATCH /requests/{id}`.
+    1.14.0 (2026-09-18): Единый реестр файлов (Q14) — схема `File`, `id` вложений чата
+      и файлов запроса теперь из реестра, у документов заказа добавлен `file_id`,
+      `file_path` убран из ответов, прикрепление чужой загрузки → 403, удаление файла
+      считает оставшиеся ссылки, имя файла на диске случайное.
+
     1.13.0 (2026-08-03): Новый код 422 Invalid Date Field For Stage Type в POST/PATCH
       этапов маршрута — дата, не принадлежащая stage_type (например actual_date для
       customs), раньше проходила валидацию и молча терялась с ответом 200. В details
@@ -387,6 +448,35 @@ paths:
       responses:
         '200':
           description: Список логистов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/ops:
+    get:
+      tags:
+        - Users
+      summary: Список активных операторов (Ops)
+      description: |
+        Возвращает список активных пользователей с ролью Ops. Доступен всем авторизованным.
+
+        Используется в двух местах:
+        - выбор оператора при `POST /requests/{id}/approve` (передача заказа на сопровождение, Q16);
+        - выбор ведущего менеджера (`leading_manager_id`) в карточке клиента. Раньше для этого
+          был только `GET /users`, закрытый ролью Admin, — у Ops и Supervisor список не загружался.
+      responses:
+        '200':
+          description: Список операторов
           content:
             application/json:
               schema:
@@ -986,8 +1076,18 @@ paths:
       description: |
         Правила доступа:
         - Admin, Supervisor: могут обновлять любой запрос
-        - Sales, Ops: могут обновлять только свои запросы (request.initiator_id = current_user.id)
-        - Запрос в статусе Completed обновлять запрещено
+        - Sales, Ops: могут обновлять только свои запросы (request.initiator_id = current_user.id);
+          Ops — также заказы, переданные ему на сопровождение (`ops_manager_id`)
+        - Запрос в статусе Completed обновлять запрещено (422)
+        - Sales может редактировать запрос только в статусах New/Negotiating; после одобрения
+          запись ведёт Ops → 403 (Q16)
+
+        Смена клиента (`client_id`, Q17):
+        - только Ops, Admin, Supervisor; Sales → 403 (карточками клиентов не распоряжается, ТЗ §3.3)
+        - только в статусах New/Negotiating → иначе 422
+        - если у запроса уже есть договор → 422 (сначала удалить договор)
+        - новый клиент должен быть в статусе Lead или Active; Inactive → 422
+        - передача текущего `client_id` не считается сменой
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -1020,9 +1120,14 @@ paths:
         - Route
       summary: Отправить сообщение в чат согласования маршрута
       description: |
+        **Q16:** Sales после одобрения переписку читает, но писать не может → 403 — чат ведёт Ops. Для остальных ролей чат открыт и у Completed (Q6).
+
         Правила доступа:
         - Admin, Supervisor: доступ к любому запросу
         - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
+        - Приложить можно только свой файл либо файл, уже используемый в этом же
+          запросе (ТЗ §5.2.4 — отправка логисту файлов из данных запроса);
+          чужая загрузка → 403, сообщение при этом не создаётся
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -1041,7 +1146,10 @@ paths:
                   type: array
                   items:
                     type: integer
-                  description: Массив ID загруженных файлов
+                  description: |
+                    Массив ID записей реестра файлов (из `POST /files/upload`).
+                    Эти же ID возвращаются в `files[].id` сообщения и принимаются
+                    `GET /files/{id}/download`.
       responses:
         '201':
           description: Сообщение отправлено
@@ -1398,13 +1506,34 @@ paths:
         - Requests
       summary: Одобрить запрос (превратить в заказ)
       description: |
-        Изменяет status с New/Negotiating на Approved.
+        Изменяет status с New/Negotiating на Approved. Это одновременно передача
+        заказа на сопровождение Ops (Q16) — оператор указывается явно в теле запроса,
+        без подстановки по умолчанию.
+
         Предусловия: запрос должен содержать ≥1 этап маршрута и ≥1 единицу транспорта.
         Правила доступа:
         - Admin, Supervisor: доступ к любому запросу
         - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
+
+        После одобрения инициатор-Sales теряет доступ к сопровождению заказа —
+        остаётся только чтение записи в группе `/requests` (список операторов для
+        выбора — `GET /users/ops`).
       parameters:
         - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ops_manager_id
+              properties:
+                ops_manager_id:
+                  type: integer
+                  description: |
+                    Ops, которому передаётся заказ на сопровождение. Должен существовать,
+                    иметь роль Ops и быть активным — список берётся из `GET /users/ops`.
       responses:
         '200':
           description: Запрос одобрен
@@ -1424,6 +1553,8 @@ paths:
             - Нет этапов маршрута
             - Нет единиц транспорта
             - Нет договора (добавляется через POST /requests/{id}/contracts)
+            - `ops_manager_id` не передан, не существует, не Ops или не активен
+              (ValidationError)
             - Клиент — Лид с незаполненными обязательными полями: `error: "Incomplete Lead Data"`,
               `details.missing_client_fields` — массив имён незаполненных полей
               (inn, bank_name, bank_account, correspondent_account, bik, target_volume, leading_manager_id)
@@ -1438,6 +1569,8 @@ paths:
         - Requests
       summary: Отклонить запрос
       description: |
+        **Q16:** Sales может выполнять это действие только пока запрос в статусе New/Negotiating; после одобрения заказ ведёт Ops → 403.
+
         Правила доступа:
         - Admin, Supervisor: доступ к любому запросу
         - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
@@ -1497,11 +1630,16 @@ paths:
         - Requests
       summary: Загрузить файл к запросу
       description: |
-        Прикрепить файл к запросу.
+        **Q16:** Sales может выполнять это действие только пока запрос в статусе New/Negotiating; после одобрения заказ ведёт Ops → 403.
+
+        Прикрепить к запросу файл, ранее загруженный через `POST /files/upload`.
         Правила доступа:
         - Admin, Supervisor: доступ к любому запросу
         - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
         - Для запросов в статусе Completed операция запрещена
+        - Прикрепить можно только свой файл либо файл, уже используемый в этом же
+          запросе; чужая загрузка → 403
+        - Повторное прикрепление того же файла к тому же запросу → 422
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -1515,7 +1653,7 @@ paths:
               properties:
                 file_id:
                   type: integer
-                  description: ID загруженного файла (через /files/upload)
+                  description: ID записи в реестре файлов, полученный из `POST /files/upload`
       responses:
         '201':
           description: Файл прикреплен
@@ -1538,6 +1676,11 @@ paths:
         - Requests
       summary: Удалить файл запроса
       description: |
+        **Q16:** Sales может выполнять это действие только пока запрос в статусе New/Negotiating; после одобрения заказ ведёт Ops → 403.
+
+        Открепляет файл от запроса. Сам файл удаляется с диска, только если на него
+        не ссылается ничего другого — вложение чата или документ заказа держат его дальше.
+
         Правила доступа:
         - Admin, Supervisor: доступ к любому запросу
         - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
@@ -1549,7 +1692,7 @@ paths:
           required: true
           schema:
             type: integer
-          description: ID файла
+          description: ID файла в реестре (поле `id` из списка файлов запроса)
       responses:
         '204':
           description: Файл удален
@@ -1593,6 +1736,10 @@ paths:
         - Requests
       summary: Добавить договор к запросу
       description: |
+        **TD-016:** Logist → 403 — договоры вводят Sales/Ops (ТЗ §4.5). Та же таблица договоров доступна через `/orders/{id}/contracts`, запрет стоит на обоих входах.
+
+        **Q16:** Sales может выполнять это действие только пока запрос в статусе New/Negotiating; после одобрения заказ ведёт Ops → 403.
+
         Добавляется Sales до перевода в заказ. Наличие хотя бы одного договора
         является обязательным условием для выполнения POST /requests/{id}/approve.
         Нельзя добавить к запросу в статусе Completed или Rejected.
@@ -1625,6 +1772,10 @@ paths:
       tags:
         - Requests
       summary: Удалить договор запроса
+      description: |
+        **TD-016:** Logist → 403 — договоры вводят Sales/Ops (ТЗ §4.5). Та же таблица договоров доступна через `/orders/{id}/contracts`, запрет стоит на обоих входах.
+
+        **Q16:** Sales может выполнять это действие только пока запрос в статусе New/Negotiating; после одобрения заказ ведёт Ops → 403.
       parameters:
         - $ref: '#/components/parameters/IdParam'
         - name: contractId
@@ -1653,7 +1804,9 @@ paths:
         Запросы со статусом Approved или Completed.
         Правила доступа:
         - Admin, Supervisor: доступ ко всем заказам
-        - Sales, Ops: доступ только к своим заказам (request.initiator_id = current_user.id)
+        - Ops: заказы, переданные ему на сопровождение (`ops_manager_id`), и созданные им самим
+        - Logist: заказы, где он назначен (`logist_id`)
+        - Sales: пустой список — после одобрения заказ ведёт Ops (Q16, ТЗ §5.3.1)
       parameters:
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/LimitParam'
@@ -1689,7 +1842,9 @@ paths:
       description: |
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
-        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Ops: переданные ему (`ops_manager_id`) или созданные им
+        - Logist: назначенные ему (`logist_id`)
+        - Sales: 403 — после одобрения заказ ведёт Ops (Q16); свою запись Sales видит в `GET /requests/{id}`
       parameters:
         - $ref: '#/components/parameters/IdParam'
       responses:
@@ -1714,7 +1869,9 @@ paths:
       description: |
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
-        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Ops: переданные ему (`ops_manager_id`) или созданные им
+        - Logist: назначенные ему (`logist_id`)
+        - Sales: 403 — после одобрения заказ ведёт Ops (Q16); свою запись Sales видит в `GET /requests/{id}`
       parameters:
         - $ref: '#/components/parameters/IdParam'
       responses:
@@ -1738,10 +1895,15 @@ paths:
         - Orders
       summary: Добавить документ к заказу
       description: |
+        Оформляет ранее загруженный файл документом заказа.
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
-        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Ops: переданные ему (`ops_manager_id`) или созданные им
+        - Logist: назначенные ему (`logist_id`)
+        - Sales: 403 — после одобрения заказ ведёт Ops (Q16); свою запись Sales видит в `GET /requests/{id}`
         - Для заказов в статусе Completed операция запрещена
+        - Оформить можно только свой файл либо файл, уже используемый в этом же
+          заказе; чужая загрузка → 403
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -1755,7 +1917,7 @@ paths:
               properties:
                 file_id:
                   type: integer
-                  description: ID загруженного файла
+                  description: ID записи в реестре файлов, полученный из `POST /files/upload`
                 document_description:
                   type: string
                   description: Описание документа
@@ -1781,10 +1943,14 @@ paths:
         - Orders
       summary: Удалить документ заказа
       description: |
+        Мягкое удаление: запись документа остаётся в БД, файл на диске не удаляется.
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
-        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
-        - Для заказов в статусе Completed операция запрещена
+        - Ops: заказы, переданные ему (`ops_manager_id`), либо созданные им
+        - Logist: 403 — документы ему доступны только на чтение (Q15)
+        - Sales: 403 — после одобрения заказ ведёт Ops (Q16)
+        - Запись не в статусе Approved/Completed → 404
+        - Для заказов в статусе Completed операция запрещена (422)
       parameters:
         - $ref: '#/components/parameters/IdParam'
         - name: documentId
@@ -1800,13 +1966,47 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: Документ не найден
+          description: Документ или заказ не найден
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '422':
           $ref: '#/components/responses/ValidationError'
+
+  /orders/{id}/documents/{documentId}/download:
+    get:
+      tags:
+        - Orders
+      summary: Скачать документ заказа
+      description: |
+        Отдаёт файл документа под исходным именем. Тот же файл доступен и через
+        `GET /files/{file_id}/download` — поле `file_id` есть у каждого документа.
+        Правила доступа — как у просмотра заказа: Admin, Supervisor, сопровождающий Ops
+        (или Ops-инициатор), назначенный Logist. Sales — 403.
+        Запись не в статусе Approved/Completed, документ другого заказа или мягко
+        удалённый документ → 404.
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Файл документа
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /orders/{id}/invoices:
     get:
@@ -1816,7 +2016,9 @@ paths:
       description: |
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
-        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Ops: переданные ему (`ops_manager_id`) или созданные им
+        - Logist: назначенные ему (`logist_id`)
+        - Sales: 403 — после одобрения заказ ведёт Ops (Q16); свою запись Sales видит в `GET /requests/{id}`
       parameters:
         - $ref: '#/components/parameters/IdParam'
       responses:
@@ -1840,9 +2042,13 @@ paths:
         - Orders
       summary: Создать счет
       description: |
+        **TD-016:** назначенный Logist видит данные заказа, но не меняет их → 403. Меняют Admin, Supervisor и Ops.
+
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
-        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Ops: переданные ему (`ops_manager_id`) или созданные им
+        - Logist: назначенные ему (`logist_id`)
+        - Sales: 403 — после одобрения заказ ведёт Ops (Q16); свою запись Sales видит в `GET /requests/{id}`
         - Для заказов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
@@ -1876,7 +2082,9 @@ paths:
       description: |
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
-        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Ops: переданные ему (`ops_manager_id`) или созданные им
+        - Logist: назначенные ему (`logist_id`)
+        - Sales: 403 — после одобрения заказ ведёт Ops (Q16); свою запись Sales видит в `GET /requests/{id}`
       parameters:
         - $ref: '#/components/parameters/IdParam'
       responses:
@@ -1900,9 +2108,13 @@ paths:
         - Orders
       summary: Добавить договор к заказу
       description: |
+        **TD-016:** назначенный Logist видит данные заказа, но не меняет их → 403. Меняют Admin, Supervisor и Ops.
+
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
-        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Ops: переданные ему (`ops_manager_id`) или созданные им
+        - Logist: назначенные ему (`logist_id`)
+        - Sales: 403 — после одобрения заказ ведёт Ops (Q16); свою запись Sales видит в `GET /requests/{id}`
         - Для заказов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
@@ -1934,9 +2146,13 @@ paths:
         - Orders
       summary: Удалить договор заказа
       description: |
+        **TD-016:** назначенный Logist видит данные заказа, но не меняет их → 403. Меняют Admin, Supervisor и Ops.
+
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
-        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Ops: переданные ему (`ops_manager_id`) или созданные им
+        - Logist: назначенные ему (`logist_id`)
+        - Sales: 403 — после одобрения заказ ведёт Ops (Q16); свою запись Sales видит в `GET /requests/{id}`
         - Для заказов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
@@ -1970,7 +2186,9 @@ paths:
       description: |
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
-        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Ops: переданные ему (`ops_manager_id`) или созданные им
+        - Logist: назначенные ему (`logist_id`)
+        - Sales: 403 — после одобрения заказ ведёт Ops (Q16); свою запись Sales видит в `GET /requests/{id}`
       parameters:
         - $ref: '#/components/parameters/IdParam'
       responses:
@@ -1994,9 +2212,13 @@ paths:
         - Orders
       summary: Добавить доход/расход
       description: |
+        **TD-016:** назначенный Logist видит данные заказа, но не меняет их → 403. Меняют Admin, Supervisor и Ops.
+
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
-        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Ops: переданные ему (`ops_manager_id`) или созданные им
+        - Logist: назначенные ему (`logist_id`)
+        - Sales: 403 — после одобрения заказ ведёт Ops (Q16); свою запись Sales видит в `GET /requests/{id}`
         - Для заказов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
@@ -2028,10 +2250,14 @@ paths:
         - Orders
       summary: Изменить финансовую запись
       description: |
+        **TD-016:** назначенный Logist видит данные заказа, но не меняет их → 403. Меняют Admin, Supervisor и Ops.
+
         Частичное обновление. `record_type` не редактируется через этот эндпоинт.
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
-        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Ops: переданные ему (`ops_manager_id`) или созданные им
+        - Logist: назначенные ему (`logist_id`)
+        - Sales: 403 — после одобрения заказ ведёт Ops (Q16); свою запись Sales видит в `GET /requests/{id}`
         - Для заказов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
@@ -2092,11 +2318,15 @@ paths:
         - Orders
       summary: Удалить финансовую запись
       description: |
+        **TD-016:** назначенный Logist видит данные заказа, но не меняет их → 403. Меняют Admin, Supervisor и Ops.
+
         Soft-delete через `deleted_at` — запись не уничтожается физически, только
         скрывается из GET-списка.
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
-        - Sales, Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Ops: переданные ему (`ops_manager_id`) или созданные им
+        - Logist: назначенные ему (`logist_id`)
+        - Sales: 403 — после одобрения заказ ведёт Ops (Q16); свою запись Sales видит в `GET /requests/{id}`
         - Для заказов в статусе Completed операция запрещена
       parameters:
         - $ref: '#/components/parameters/IdParam'
@@ -2482,8 +2712,18 @@ paths:
         - Files
       summary: Загрузить файл
       description: |
-        Загружает файл и возвращает его ID (file_id).
-        Файл не привязывается к запросу автоматически — для привязки использовать POST /requests/{id}/files.
+        Первый шаг двухшаговой загрузки: файл попадает в реестр `file` и возвращается его `id`.
+        Ни к чему не привязан — привязка отдельным вызовом:
+        `POST /requests/{id}/files` (файлы запроса), `POST /requests/{id}/negotiate`
+        (вложение в чат согласования) или `POST /orders/{id}/documents` (документ заказа).
+        Один и тот же `id` можно использовать во всех трёх контекстах — файл на диске
+        при этом остаётся один.
+
+        Прикрепить можно только свой файл либо файл, уже используемый в этом же запросе
+        (сценарий ТЗ §5.2.4 — отправка логисту файлов из данных запроса); иначе 403.
+
+        На диске файл сохраняется под случайным именем, исходное хранится в реестре
+        и подставляется при скачивании.
       requestBody:
         required: true
         content:
@@ -2502,16 +2742,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  id:
-                    type: integer
-                  file_name:
-                    type: string
-                  file_size:
-                    type: integer
-                  file_path:
-                    type: string
+                $ref: '#/components/schemas/File'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '422':
@@ -2522,6 +2753,15 @@ paths:
       tags:
         - Files
       summary: Скачать файл
+      description: |
+        `id` — идентификатор файла в реестре: тот, что вернул `POST /files/upload`,
+        и тот, что приходит в `files[].id` сообщений чата, в списке файлов запроса
+        и в поле `file_id` документов заказа.
+
+        Правила доступа: свою загрузку можно скачать всегда, в том числе пока она никуда
+        не прикреплена. Чужую — если хотя бы одна привязка файла ведёт к запросу или заказу,
+        доступному по обычным правилам (Admin/Supervisor — любые, Sales/Ops — свои,
+        Logist — назначенные ему).
       parameters:
         - name: id
           in: path
@@ -2536,6 +2776,12 @@ paths:
               schema:
                 type: string
                 format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   # ===== REPORTS =====
   /reports/requests:
@@ -3336,6 +3582,21 @@ components:
           allOf:
             - $ref: '#/components/schemas/UserLite'
           nullable: true
+        ops_manager_id:
+          type: integer
+          nullable: true
+          description: |
+            Ops, которому передан заказ на сопровождение (Q16). Проставляется явно
+            при `POST /requests/{id}/approve` — обязательный параметр этого эндпоинта.
+            NULL для запросов (New/Negotiating/Rejected) — поле имеет смысл только
+            после одобрения. После этого запись доступна и видна инициатору-Sales
+            только в группе `/requests` (история); сопровождение заказа —
+            документы, финансы, фактические даты — доступно только `ops_manager_id`
+            (или инициатору-Ops), Admin и Supervisor.
+        ops_manager:
+          allOf:
+            - $ref: '#/components/schemas/UserLite'
+          nullable: true
         departure_point:
           type: string
         destination_point:
@@ -3517,6 +3778,12 @@ components:
           type: string
           format: date-time
           description: Timestamp последнего изменения (для контроля версий и предотвращения конфликтов)
+        client_id:
+          type: integer
+          description: |
+            Привязка запроса к другому клиенту (Q17). Только Ops/Admin/Supervisor,
+            только в статусах New/Negotiating, без договора, клиент Lead или Active.
+            Правила — в описании `PATCH /requests/{id}`.
         incoterms:
           type: string
         shipper_name:
@@ -3836,15 +4103,11 @@ components:
           format: date-time
         files:
           type: array
+          description: |
+            Вложения сообщения. `id` — идентификатор файла в реестре (schema `File`):
+            именно он принимается `GET /files/{id}/download`.
           items:
-            type: object
-            properties:
-              id:
-                type: integer
-              file_name:
-                type: string
-              file_path:
-                type: string
+            $ref: '#/components/schemas/File'
 
     # ===== ORDER =====
     OrderList:
@@ -3877,15 +4140,22 @@ components:
       type: object
       properties:
         id:
+          description: |
+            Идентификатор документа заказа (не файла). По нему работают
+            `DELETE /orders/{id}/documents/{documentId}`.
           type: integer
         request_id:
+          type: integer
+        file_id:
+          description: |
+            Идентификатор файла в реестре (schema `File`) — его принимает
+            `GET /files/{id}/download`. Один файл может быть одновременно
+            документом заказа, файлом запроса и вложением чата.
           type: integer
         document_description:
           type: string
           nullable: true
         file_name:
-          type: string
-        file_path:
           type: string
         file_size:
           type: integer
@@ -4059,19 +4329,23 @@ components:
         comment:
           type: string
 
-    RequestFile:
+    File:
       type: object
+      description: |
+        Запись реестра загруженных файлов. Одна запись = один физический файл.
+        `id` возвращается из `POST /files/upload`, принимается всеми эндпоинтами
+        прикрепления (`POST /requests/{id}/files`, `POST /requests/{id}/negotiate`,
+        `POST /orders/{id}/documents`) и скачиванием `GET /files/{id}/download`.
+        Внутренний путь файла на диске наружу не отдаётся.
       properties:
         id:
           type: integer
-        request_id:
-          type: integer
         file_name:
-          type: string
-        file_path:
+          description: Исходное имя файла — под ним файл отдаётся при скачивании
           type: string
         file_size:
           type: integer
+          nullable: true
         uploaded_by_id:
           type: integer
         uploaded_by:
@@ -4079,6 +4353,18 @@ components:
         created_at:
           type: string
           format: date-time
+
+    RequestFile:
+      description: |
+        Файл, прикреплённый к запросу = запись реестра плюс привязка к запросу.
+        `id` здесь — идентификатор файла в реестре: он же принимается
+        `DELETE /requests/{id}/files/{fileId}` и `GET /files/{id}/download`.
+      allOf:
+        - $ref: '#/components/schemas/File'
+        - type: object
+          properties:
+            request_id:
+              type: integer
 
     # ===== DICTIONARY =====
     DictionaryItem:
