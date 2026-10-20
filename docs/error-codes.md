@@ -288,6 +288,9 @@
 - `PATCH /api/contragents/{id}` — обновление контрагента
 - `PATCH /api/requests/{id}` — обновление запроса
 - `PATCH /api/users/{id}` — обновление пользователя
+- `POST /api/orders/{id}/sign`, `/reopen`, `/request-completion`, `/complete` — действия с заказом
+  (с 1.17.0). Тело `{ "updated_at": ... }` обязательно: без него 422. Ответ 409 здесь содержит
+  `error: "Conflict"` и `details.your_updated_at` / `details.current_updated_at`.
 
 ### Маршрут изменился (перестановка этапов)
 **HTTP Status:** 409 Conflict

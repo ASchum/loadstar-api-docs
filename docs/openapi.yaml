@@ -32,6 +32,20 @@ info:
 
     ## Changelog
 
+    **1.17.0** (2026-10-20): Запрос на завершение заказа (чеклист фронта, п. 2) и проверка
+    `updated_at` в действиях с заказом.
+
+    **Изменения для фронта:**
+    - новый `POST /orders/{id}/request-completion` — Ops, которому передан заказ, запрашивает
+      завершение. Повторный вызов идемпотентен (200);
+    - поля `completion_requested_at` и `completion_requested_by_id` в `Request` (списки и карточки).
+      Раньше их в ответах не было — фронт подставлял null сам;
+    - `complete` снимает запрос на завершение и работает только для заказа в `Approved`
+      (раньше «завершался» и запрос в New) — иначе 422 `Invalid Order Status`;
+    - `sign`, `reopen`, `complete`, `request-completion` требуют в теле `updated_at` заказа,
+      каким его видел клиент: без него — 422, если заказ с тех пор изменился — **409 `Conflict`**.
+      Фронт поле уже присылал, но бэкенд его игнорировал.
+
     **1.16.0** (2026-10-20): Перестановка этапов маршрута после reopen (чеклист фронта, п. 1).
 
     **Изменения для фронта:**
@@ -186,9 +200,12 @@ info:
 
     **1.5.2** (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода.
 
-  version: 1.16.0
+  version: 1.17.0
   x-updated: "2026-10-20"
   x-changelog: |
+    1.17.0 (2026-10-20): `POST /orders/{id}/request-completion`, поля `completion_requested_at`/
+      `completion_requested_by_id`; `complete` только из Approved и снимает запрос; `updated_at`
+      обязателен в sign/reopen/complete/request-completion (устаревший → 409).
     1.16.0 (2026-10-20): reorder — полный список этапов (иначе 409 `Route Changed`), пройденный
       этап не сдвигается (422 `Cannot Reorder Stage` + `locked_stage_ids`), дубли → 422;
       `stage_order` в `POST /requests/{id}/route` → 422; записи в маршрут под блокировкой.
@@ -2413,12 +2430,24 @@ paths:
         - Orders
       summary: Завершить заказ
       description: |
-        Изменяет status на Completed. Только Admin/Supervisor.
+        Approved → Completed (ТЗ §4.5), `completed_at` = now. Только Admin/Supervisor.
+        Снимает запрос Ops на завершение (`completion_requested_at`/`completion_requested_by_id`
+        → null), если он был. Завершать можно и без запроса.
+
+        Тело — `updated_at`, каким клиент видел заказ. Если заказ с тех пор изменился
+        (например, Ops запросил завершение или маршрут сбросили) — 409, заказ не завершается.
+
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
         - Sales, Ops: доступ запрещен
       parameters:
         - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderActionBody'
       responses:
         '200':
           description: Заказ завершен
@@ -2432,8 +2461,18 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '422':
-          $ref: '#/components/responses/ValidationError'
+          description: |
+            - Заказ уже завершён
+            - Запись не в статусе Approved (`Invalid Order Status`) — например, запрос в New.
+              До 1.17.0 такой запрос «завершался»
+            - Нет `updated_at`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /orders/{id}/sign:
     post:
@@ -2442,12 +2481,21 @@ paths:
       summary: Подписать заказ
       description: |
         Устанавливает signet_at = now(). Только для заказов со статусом Approved.
+
+        Тело — `updated_at`, каким клиент видел заказ; изменился с тех пор → 409.
+
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
-        - Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Ops: к заказам, переданным ему (`ops_manager_id`), и созданным им
         - Sales: доступ запрещен
       parameters:
         - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderActionBody'
       responses:
         '200':
           description: Заказ подписан
@@ -2461,8 +2509,10 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '422':
-          description: Заказ не в статусе Approved
+          description: Заказ не в статусе Approved (`Invalid Order Status`) или нет `updated_at`
           content:
             application/json:
               schema:
@@ -2478,11 +2528,20 @@ paths:
         Supervisor самостоятельно корректирует маршрут, затем устанавливает is_route_negotiated = true
         через PATCH /requests/{id}.
         signet_at сохраняется (не сбрасывается).
+
+        Тело — `updated_at`, каким клиент видел заказ; изменился с тех пор → 409.
+
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
         - Ops, Sales: доступ запрещен
       parameters:
         - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderActionBody'
       responses:
         '200':
           description: Согласование маршрута сброшено, заказ остаётся в статусе Approved
@@ -2496,8 +2555,10 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '422':
-          description: Заказ не в статусе Approved
+          description: Заказ не в статусе Approved (`Invalid Order Status`) или нет `updated_at`
           content:
             application/json:
               schema:
@@ -2547,6 +2608,64 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           description: Заказ не в статусе Approved (error - "Invalid Order Status")
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /orders/{id}/request-completion:
+    post:
+      tags:
+        - Orders
+      summary: Запросить завершение заказа
+      description: |
+        Ops, которому передан заказ, просит Supervisor завершить его (ТЗ §3.5, §5.3.3).
+        Ставит отметку `completion_requested_at` / `completion_requested_by_id` — она видна
+        в `GET /orders` и `GET /orders/{id}`. Статус заказа не меняется.
+
+        Supervisor подтверждает через `POST /orders/{id}/complete` — тот же вызов снимает
+        отметку. Отказа в завершении по ТЗ нет: отметка остаётся до завершения заказа.
+
+        Идемпотентно: если завершение уже запрошено, повторный вызов ничего не меняет,
+        возвращает заказ (200) и `updated_at` не проверяет. Время первого запроса сохраняется.
+
+        Тело — `updated_at`, каким клиент видел заказ; изменился с тех пор → 409.
+
+        Правила доступа:
+        - Ops: только к заказу, переданному ему (`ops_manager_id`)
+        - Admin, Supervisor: 403 — завершают сразу через `complete`
+        - Sales, Logist: 403
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderActionBody'
+      responses:
+        '201':
+          description: Завершение запрошено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetail'
+        '200':
+          description: Завершение уже было запрошено — возвращено текущее состояние
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          description: Заказ не в статусе Approved (`Invalid Order Status`) или нет `updated_at`
           content:
             application/json:
               schema:
@@ -3670,6 +3789,17 @@ components:
           format: date-time
           nullable: true
           description: 'Дата/время согласования заявки для запуска в исполнение (NULL=не согласована, заполненное значение=готова к исполнению)'
+        completion_requested_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            Когда Ops запросил завершение заказа (`POST /orders/{id}/request-completion`), либо NULL.
+            Снимается при `POST /orders/{id}/complete`. Всегда NULL для запросов (не заказов).
+        completion_requested_by_id:
+          type: integer
+          nullable: true
+          description: Кто запросил завершение (Ops, которому передан заказ), либо NULL
         pending_route_change_request:
           allOf:
             - $ref: '#/components/schemas/RouteChangeRequest'
@@ -4123,6 +4253,20 @@ components:
           type: string
           format: date
           description: Фактическая дата прохождения таможни (используется для stage_type = customs)
+
+    OrderActionBody:
+      type: object
+      required:
+        - updated_at
+      description: |
+        Тело действий с заказом (sign, reopen, request-completion, complete): `updated_at`
+        заказа, каким его видел клиент (из `GET /orders/{id}` или ответа предыдущего действия).
+        Если заказ с тех пор изменился — 409 `Conflict`, действие не выполняется.
+      properties:
+        updated_at:
+          type: string
+          format: date-time
+          example: '2026-10-20T12:00:00+00:00'
 
     RouteReorder:
       type: object
