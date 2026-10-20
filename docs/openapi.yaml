@@ -32,6 +32,15 @@ info:
 
     ## Changelog
 
+    **1.18.1** (2026-10-20): `limit` в списках и уточнения документации.
+    - `GET /requests` и `GET /contragents` принимают `limit` — раньше страница всегда была
+      по 20, хотя параметр был описан;
+    - у `GET /requests` появилось описание: кто что видит, что в списке есть и переданные
+      заказы (так Sales находит свои — `?status=Approved`), что `initiator_id` работает только
+      для Admin/Supervisor;
+    - `request-route-change`: исправлено устаревшее правило доступа Ops — ещё и заказы,
+      переданные ему (`ops_manager_id`, Q16). Поведение не менялось.
+
     **1.18.0** (2026-10-20): Перевод в заказ, состав ТС, ошибки БД (чеклист фронта, п. 3).
 
     **Изменения для фронта:**
@@ -219,9 +228,12 @@ info:
 
     **1.5.2** (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода.
 
-  version: 1.18.0
+  version: 1.18.1
   x-updated: "2026-10-20"
   x-changelog: |
+    1.18.1 (2026-10-20): `limit` в `GET /requests` и `GET /contragents`; описание `GET /requests`
+      (переданные заказы в списке, `initiator_id` только для Admin/Supervisor); правило доступа
+      Ops в `request-route-change`.
     1.18.0 (2026-10-20): повтор типа ТС → 422 `Duplicate Vehicle Type`; `reject` требует
       `updated_at` (устаревший → 409); нарушение уникальности → 409 `Data Conflict` вместо 500;
       approve и запись запроса — в транзакции.
@@ -796,6 +808,8 @@ paths:
       tags:
         - Contragents
       summary: Список контрагентов
+      description: |
+        `limit` и `page` работают с 1.18.0 (раньше размер страницы был всегда 20).
       parameters:
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/LimitParam'
@@ -1057,6 +1071,22 @@ paths:
       tags:
         - Requests
       summary: Список запросов
+      description: |
+        Все записи, видимые пользователю, **в любом статусе** — включая уже переданные
+        в работу заказы (`Approved`, `Completed`): запрос и заказ — одна запись.
+
+        Кто что видит:
+        - Admin, Supervisor: все записи
+        - Logist: записи, где он назначен (`logist_id`)
+        - Sales, Ops: записи, созданные ими (`initiator_id`). Заказы, переданные Ops
+          на сопровождение, он видит в `GET /orders`
+
+        **Sales и переданные заказы (Q16):** раздел `/orders` Sales закрыт. Свои переданные
+        заказы он находит здесь — `?status=Approved` или `?status=Completed` — и открывает
+        через `GET /requests/{id}`: карточка, маршрут с фактическими датами, переписка,
+        файлы запроса, договоры. Документы заказа (накладные), финансы и счета ему не видны.
+
+        `limit` и `page` работают с 1.18.0 (раньше размер страницы был всегда 20).
       parameters:
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/LimitParam'
@@ -1070,6 +1100,9 @@ paths:
             type: integer
         - name: initiator_id
           in: query
+          description: |
+            Только для Admin/Supervisor. Остальным параметр игнорируется — они и так видят
+            только свои записи.
           schema:
             type: integer
       responses:
@@ -2640,7 +2673,7 @@ paths:
 
         Правила доступа:
         - Admin, Supervisor: доступ к любому заказу
-        - Ops: только к своим заказам (request.initiator_id = current_user.id)
+        - Ops: к заказам, переданным ему (`ops_manager_id`), и созданным им (`initiator_id`)
         - Sales, Logist: доступ запрещён
       parameters:
         - $ref: '#/components/parameters/IdParam'
