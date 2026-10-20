@@ -32,6 +32,25 @@ info:
 
     ## Changelog
 
+    **1.16.0** (2026-10-20): Перестановка этапов маршрута после reopen (чеклист фронта, п. 1).
+
+    **Изменения для фронта:**
+    - `PUT /requests/{id}/route/reorder` принимает **все** этапы маршрута. Неполный список или
+      чужой ID → **409** `Route Changed` (`details.missing_stage_ids`, `details.unknown_stage_ids`):
+      маршрут изменился с момента загрузки, нужно перезагрузить его и повторить. Раньше чужой ID
+      давал 404, а неполный список — 500 с частично записанным порядком;
+    - пройденный этап (есть хотя бы одна фактическая дата) нельзя сдвигать с его позиции →
+      422 `Cannot Reorder Stage` с `details.locked_stage_ids`. Незавершённые этапы вокруг него
+      переставляются свободно. Раньше 422 возвращался, если пройденный этап вообще был в списке, —
+      то есть после reopen перестановка не проходила никогда;
+    - повтор ID в `stage_ids` → 422;
+    - `POST /requests/{id}/route` больше не принимает `stage_order` → 422. Новый этап всегда
+      добавляется в конец, место ему задаёт reorder. Занятый номер раньше давал 500.
+
+    **Без изменений контракта:** все записи в маршрут (добавление, правка, удаление,
+    перестановка) выполняются в транзакции с блокировкой маршрута — одновременные правки
+    одного маршрута больше не дают 500 и не оставляют порядок наполовину записанным.
+
     **1.15.0** (2026-09-22): Передача заказа от Sales к Ops, документы заказа, смена клиента
     (Q15–Q17).
 
@@ -167,9 +186,12 @@ info:
 
     **1.5.2** (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода.
 
-  version: 1.15.0
-  x-updated: "2026-09-22"
+  version: 1.16.0
+  x-updated: "2026-10-20"
   x-changelog: |
+    1.16.0 (2026-10-20): reorder — полный список этапов (иначе 409 `Route Changed`), пройденный
+      этап не сдвигается (422 `Cannot Reorder Stage` + `locked_stage_ids`), дубли → 422;
+      `stage_order` в `POST /requests/{id}/route` → 422; записи в маршрут под блокировкой.
     1.15.0 (2026-09-22): Q15–Q17 — `approve` требует `ops_manager_id`, Sales теряет доступ
       к заказу после одобрения, `GET /users/ops`, скачивание документа заказа, документы
       только у заказов, логист — только чтение документов, `client_id` в `PATCH /requests/{id}`.
@@ -1232,6 +1254,8 @@ paths:
           (например `actual_date` при `stage_type = customs`) вернёт 422
           `Invalid Date Field For Stage Type` с `details.invalid_fields` и
           `details.allowed_fields`. Этап при этом не создаётся.
+        - Этап всегда добавляется в конец маршрута. Поле `stage_order` не принимается (422):
+          позиция задаётся через `PUT /requests/{id}/route/reorder`.
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -1457,10 +1481,22 @@ paths:
         - Route
       summary: Изменить порядок этапов маршрута
       description: |
-        Принимает массив ID этапов в нужном порядке. Бэкенд переназначает stage_order всем этапам.
+        Принимает ID **всех** этапов маршрута в нужном порядке. Бэкенд переназначает
+        stage_order всем этапам.
+
+        Правила:
+        - список должен совпадать с текущим набором этапов маршрута. Если этапа не хватает или
+          передан чужой — 409 `Route Changed`: маршрут изменился с момента загрузки
+          (кто-то добавил или удалил этап), его нужно перезагрузить и повторить перестановку;
+        - пройденный этап (есть хотя бы одна фактическая дата) остаётся на своей позиции.
+          Незавершённые этапы переставляются свободно — так после
+          `POST /orders/{id}/reopen` Ops правит ещё не исполненную часть маршрута (ТЗ §3.5);
+        - операция атомарна: при любой ошибке порядок в БД не меняется.
+
         Правила доступа:
         - Admin, Supervisor, Logist: могут изменять порядок (кроме Completed)
-        - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
+        - Sales, Ops: только к своим запросам (инициатор), Ops — также к заказам, переданным
+          ему (`ops_manager_id`). Sales — только пока запрос в New/Negotiating
         - Для запросов в статусе Completed операция запрещена
         - Sales, Ops: запрещено если `is_route_negotiated = true`
       parameters:
@@ -1485,20 +1521,38 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: Один или несколько этапов не найдены
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            `Route Changed` — список не совпадает с текущим маршрутом.
+            `details.missing_stage_ids` — этапы маршрута, которых нет в списке;
+            `details.unknown_stage_ids` — переданные ID, которых нет в маршруте.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              example:
+                error: Route Changed
+                message: Маршрут изменился с момента загрузки. Обновите страницу и повторите перестановку.
+                details:
+                  missing_stage_ids: [88]
+                  unknown_stage_ids: []
         '422':
           description: |
-            - Запрос в статусе Completed
-            - Sales/Ops: маршрут уже согласован (`is_route_negotiated = true`)
-            - Один или несколько этапов уже имеют фактические даты
+            - Запрос в статусе Completed (`Cannot Modify Route`)
+            - Sales/Ops: маршрут уже согласован (`Route Already Negotiated`)
+            - Пройденный этап сдвинут со своей позиции (`Cannot Reorder Stage`,
+              `details.locked_stage_ids`)
+            - Ошибка валидации: нет `stage_ids` или в нём повторяется ID
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              example:
+                error: Cannot Reorder Stage
+                message: 'Пройденные этапы нельзя перемещать: у них уже есть фактические даты.'
+                details:
+                  locked_stage_ids: [84]
 
   /requests/{id}/approve:
     post:
@@ -3985,9 +4039,6 @@ components:
       required:
         - stage_type
       properties:
-        stage_order:
-          type: integer
-          description: Порядковый номер этапа. Если не указан, этап добавится в конец маршрута
         stage_type:
           $ref: '#/components/schemas/RouteStageType'
         contragent_id:
@@ -4082,7 +4133,9 @@ components:
           type: array
           items:
             type: integer
-          description: Массив ID этапов в нужном порядке
+          description: |
+            ID **всех** этапов маршрута в нужном порядке, без повторов. Позиция в массиве
+            становится новым `stage_order` (с 1).
           example: [5, 2, 8, 1]
 
     RouteNegotiation:
