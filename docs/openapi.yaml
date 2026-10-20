@@ -32,6 +32,25 @@ info:
 
     ## Changelog
 
+    **1.18.0** (2026-10-20): Перевод в заказ, состав ТС, ошибки БД (чеклист фронта, п. 3).
+
+    **Изменения для фронта:**
+    - повтор типа ТС в `transport_units` (`POST /requests`, `PATCH /requests/{id}`, без учёта
+      регистра) → 422 `Duplicate Vehicle Type` с `details.duplicate_vehicle_types`; ничего не
+      сохраняется. Раньше — 500 с частично записанным запросом или обрезанным составом.
+      Лучше не давать выбрать в составе тип, который там уже есть;
+    - `POST /requests/{id}/reject` требует `updated_at`: без него 422, устаревший → 409 `Conflict`.
+      Фронт поле уже присылал, бэкенд его игнорировал;
+    - нарушение уникальности в БД, не проверенное заранее, теперь 409 `Data Conflict` вместо 500.
+
+    **Без изменений контракта:** `approve` выполняет перевод в заказ и конвертацию лида одной
+    транзакцией под блокировкой записи; создание и правка запроса — тоже в транзакции.
+
+    **Доступ Sales к переданному заказу не меняется (решение 20.10.2026):** Sales видит свою
+    запись через `/requests` — `GET /requests?status=Approved`, карточку, маршрут с фактическими
+    датами, переписку, файлы запроса и договоры. Документы заказа (накладные), финансы и счета
+    ему закрыты, раздел `/orders` — тоже (Q16).
+
     **1.17.0** (2026-10-20): Запрос на завершение заказа (чеклист фронта, п. 2) и проверка
     `updated_at` в действиях с заказом.
 
@@ -200,9 +219,12 @@ info:
 
     **1.5.2** (2026-04-30): Уточнён раздел Unauthorized — три отдельных error-кода.
 
-  version: 1.17.0
+  version: 1.18.0
   x-updated: "2026-10-20"
   x-changelog: |
+    1.18.0 (2026-10-20): повтор типа ТС → 422 `Duplicate Vehicle Type`; `reject` требует
+      `updated_at` (устаревший → 409); нарушение уникальности → 409 `Data Conflict` вместо 500;
+      approve и запись запроса — в транзакции.
     1.17.0 (2026-10-20): `POST /orders/{id}/request-completion`, поля `completion_requested_at`/
       `completion_requested_by_id`; `complete` только из Approved и снимает запрос; `updated_at`
       обязателен в sign/reopen/complete/request-completion (устаревший → 409).
@@ -1069,6 +1091,11 @@ paths:
       tags:
         - Requests
       summary: Создать запрос
+      description: |
+        Каждый тип ТС в `transport_units` — одной строкой с общим количеством. Повтор типа
+        (без учёта регистра) → 422 `Duplicate Vehicle Type` с `details.duplicate_vehicle_types`,
+        запрос не создаётся. До 1.18.0 повтор давал 500, а запрос оставался созданным
+        с частью состава.
       requestBody:
         required: true
         content:
@@ -1082,6 +1109,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RequestDetail'
+        '422':
+          description: Ошибка валидации или повтор типа ТС в составе (`Duplicate Vehicle Type`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Duplicate Vehicle Type
+                message: Тип ТС «20RF» указан в составе несколько раз. Укажите каждый тип одной строкой с общим количеством.
+                details:
+                  duplicate_vehicle_types: [20RF]
 
   /requests/{id}:
     get:
@@ -1127,6 +1165,10 @@ paths:
         - если у запроса уже есть договор → 422 (сначала удалить договор)
         - новый клиент должен быть в статусе Lead или Active; Inactive → 422
         - передача текущего `client_id` не считается сменой
+
+        Состав (`transport_units`) заменяется целиком. Повтор типа ТС (без учёта регистра) →
+        422 `Duplicate Vehicle Type`, и ни поля, ни прежний состав не меняются. До 1.18.0
+        повтор давал 500, оставляя поля сохранёнными, а состав — обрезанным.
       parameters:
         - $ref: '#/components/parameters/IdParam'
       requestBody:
@@ -1642,6 +1684,9 @@ paths:
       description: |
         **Q16:** Sales может выполнять это действие только пока запрос в статусе New/Negotiating; после одобрения заказ ведёт Ops → 403.
 
+        `updated_at` — каким клиент видел запрос; если запрос с тех пор изменился — 409,
+        запрос не отклоняется (с 1.18.0; раньше поле игнорировалось).
+
         Правила доступа:
         - Admin, Supervisor: доступ к любому запросу
         - Sales, Ops: только к своим запросам (request.initiator_id = current_user.id)
@@ -1654,8 +1699,12 @@ paths:
             schema:
               type: object
               required:
+                - updated_at
                 - rejection_reason
               properties:
+                updated_at:
+                  type: string
+                  format: date-time
                 rejection_reason:
                   type: string
       responses:
@@ -1667,6 +1716,14 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          description: Запрос уже завершён или отклонён; нет `rejection_reason` или `updated_at`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /requests/{id}/files:
     get:
@@ -3161,7 +3218,13 @@ components:
                   - Телефон должен быть в формате +7XXXXXXXXXX
 
     Conflict:
-      description: Конфликт версий (данные изменены другим пользователем)
+      description: |
+        Конфликт версий (`error: Conflict`): данные изменены другим пользователем.
+
+        С 1.18.0 любой пишущий эндпоинт может также вернуть 409 `Data Conflict`
+        (`details: null`): запись нарушила уникальность в БД, а заранее это проверено не было.
+        Раньше в таком случае был 500. Фронту — показать `message`; бэкенду — сигнал добавить
+        в этом месте явную проверку (ошибка пишется в лог).
       content:
         application/json:
           schema:
